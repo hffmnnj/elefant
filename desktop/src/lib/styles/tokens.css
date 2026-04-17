@@ -67,12 +67,12 @@
 
 /* --- LIGHT THEME --- */
 [data-theme="light"] {
-	/* Primary — same green, works on light too */
-	--color-primary: #1db85a;
-	--color-primary-hover: #18a050;
-	--color-primary-muted: #12884a;
+	/* Primary — #28d06c (user mandate, matches dark theme) */
+	--color-primary: #28d06c;
+	--color-primary-hover: #22b85e;
+	--color-primary-muted: #1a9a4e;
 	--color-primary-subtle: #dcf7e7;
-	--color-primary-foreground: #ffffff;
+	--color-primary-foreground: #05140b;
 
 	/* Backgrounds */
 	--color-bg: #ffffff;
