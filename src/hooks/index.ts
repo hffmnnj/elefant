@@ -1,4 +1,5 @@
 export { HookRegistry } from './registry.ts';
+export { emit } from './emit.ts';
 export {
 	HOOK_EVENT_NAMES,
 } from './types.ts';
