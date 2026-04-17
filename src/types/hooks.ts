@@ -1,15 +1,17 @@
-/**
- * Hook event types for the Elefant plugin system.
- * Stubs — Wave 2 will flesh these out with full context types.
- */
+export {
+	HOOK_EVENT_NAMES,
+} from '../hooks/types.ts';
 
-export type HookEventName =
-  | 'tool:before'
-  | 'tool:after'
-  | 'message:before'
-  | 'message:after'
-  | 'stream:start'
-  | 'stream:end'
-  | 'shutdown';
-
-export type HookHandler<T = unknown> = (context: T) => Promise<void>;
+export type {
+	Disposer,
+	HookContextMap,
+	HookEventName,
+	HookHandler,
+	MessageAfterContext,
+	MessageBeforeContext,
+	ShutdownContext,
+	StreamEndContext,
+	StreamStartContext,
+	ToolAfterContext,
+	ToolBeforeContext,
+} from '../hooks/types.ts';

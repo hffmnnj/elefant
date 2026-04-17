@@ -19,7 +19,22 @@ export type {
 } from './tools.js';
 
 // Hook types
-export type { HookEventName, HookHandler } from './hooks.js';
+export {
+  HOOK_EVENT_NAMES,
+} from './hooks.js';
+export type {
+  Disposer,
+  HookContextMap,
+  HookEventName,
+  HookHandler,
+  MessageAfterContext,
+  MessageBeforeContext,
+  ShutdownContext,
+  StreamEndContext,
+  StreamStartContext,
+  ToolAfterContext,
+  ToolBeforeContext,
+} from './hooks.js';
 
 // Provider types
 export type {
