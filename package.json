@@ -1,0 +1,31 @@
+{
+  "name": "elefant",
+  "version": "0.1.0",
+  "description": "Bun-native agent daemon with Elysia and TypeScript",
+  "type": "module",
+  "scripts": {
+    "dev": "bun run --watch bin/elefant.ts",
+    "start": "bun run bin/elefant.ts",
+    "build": "bun build --target bun --outdir dist bin/elefant.ts",
+    "test": "bun test",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "elysia": "^1.4.28",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.3.12"
+  },
+  "engines": {
+    "bun": ">=1.3.0"
+  },
+  "keywords": [
+    "agent",
+    "daemon",
+    "llm",
+    "bun",
+    "elysia"
+  ],
+  "license": "MIT"
+}

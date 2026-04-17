@@ -1,0 +1,30 @@
+/**
+ * Core shared types for Elefant daemon.
+ * Re-exports all type modules for convenient importing.
+ */
+
+// Result types
+export type { Result } from './result.js';
+export { ok, err } from './result.js';
+
+// Error types
+export type { ErrorCode, ElefantError } from './errors.js';
+
+// Tool types
+export type {
+  ToolDefinition,
+  ParameterDefinition,
+  ToolCall,
+  ToolResult,
+} from './tools.js';
+
+// Hook types
+export type { HookEventName, HookHandler } from './hooks.js';
+
+// Provider types
+export type {
+  ProviderFormat,
+  ProviderConfig,
+  MessageRole,
+  Message,
+} from './providers.js';
