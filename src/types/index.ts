@@ -42,4 +42,13 @@ export type {
   ProviderConfig,
   MessageRole,
   Message,
+  ProviderAdapter,
+  SendMessageOptions,
+  StreamDoneEvent,
+  StreamErrorEvent,
+  StreamEvent,
+  TextDeltaEvent,
+  ToolCallCompleteEvent,
+  ToolCallDeltaEvent,
+  ToolCallStartEvent,
 } from './providers.js';
