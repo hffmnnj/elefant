@@ -3,7 +3,7 @@
  * Never throw in the tool layer; always return Result.
  */
 
-import type { ElefantError } from './errors.ts';
+import type { ElefantError } from './errors.js';
 
 export type Result<T, E = ElefantError> =
   | { ok: true; data: T }
