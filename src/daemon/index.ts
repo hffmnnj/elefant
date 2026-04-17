@@ -14,3 +14,7 @@ export {
 	gracefulShutdown,
 	setGlobalHookRegistry,
 } from './shutdown.ts';
+export {
+	createDaemon,
+	type ElefantDaemon,
+} from './create.ts';

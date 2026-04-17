@@ -1,18 +1,14 @@
 import { Elysia } from 'elysia'
 import { z } from 'zod'
 
+import { emit, type HookRegistry } from '../hooks/index.ts'
 import type { ProviderRouter } from '../providers/router.ts'
-import type { ProviderAdapter, StreamEvent } from '../providers/types.ts'
+import type { StreamEvent } from '../providers/types.ts'
 import type { Message } from '../types/providers.ts'
-import type { ToolDefinition } from '../types/tools.ts'
+import type { ToolCall, ToolResult } from '../types/tools.ts'
+import type { ToolRegistry } from '../tools/registry.ts'
+import { runAgentLoop } from './agent-loop.ts'
 import { formatSSEEvent, formatSSEKeepalive } from './sse.ts'
-
-const parameterDefinitionSchema = z.object({
-	type: z.enum(['string', 'number', 'boolean', 'object', 'array']),
-	description: z.string().min(1),
-	required: z.boolean().optional(),
-	default: z.unknown().optional(),
-})
 
 const toolCallSchema = z.object({
 	id: z.string().min(1),
@@ -27,16 +23,10 @@ const messageSchema = z.object({
 	toolCallId: z.string().min(1).optional(),
 })
 
-const toolDefinitionSchema = z.object({
-	name: z.string().min(1),
-	description: z.string().min(1),
-	parameters: z.record(z.string(), parameterDefinitionSchema).default({}),
-})
-
 const chatRequestSchema = z.object({
 	messages: z.array(messageSchema).min(1),
 	provider: z.string().min(1).optional(),
-	tools: z.array(toolDefinitionSchema).optional().default([]),
+	maxIterations: z.number().int().positive().max(200).optional(),
 	maxTokens: z.number().int().positive().optional(),
 	temperature: z.number().min(0).max(2).optional(),
 })
@@ -58,26 +48,24 @@ function toMessageArray(messages: z.infer<typeof messageSchema>[]): Message[] {
 	}))
 }
 
-function createStubToolDefinition(
-	tools: z.infer<typeof toolDefinitionSchema>[],
-): ToolDefinition[] {
-	return tools.map((tool) => ({
-		name: tool.name,
-		description: tool.description,
-		parameters: tool.parameters,
-		execute: async () => ({
-			ok: false,
-			error: {
-				code: 'TOOL_EXECUTION_FAILED',
-				message: 'Tool execution is not available in this endpoint',
-				details: { toolName: tool.name },
-			},
-		}),
-	}))
-}
-
 function encodeSSEChunk(controller: ReadableStreamDefaultController<Uint8Array>, chunk: string): void {
 	controller.enqueue(textEncoder.encode(chunk))
+}
+
+function toToolCallPayload(toolCall: ToolCall): Record<string, unknown> {
+	return {
+		id: toolCall.id,
+		name: toolCall.name,
+		arguments: toolCall.arguments,
+	}
+}
+
+function toToolResultPayload(toolResult: ToolResult): Record<string, unknown> {
+	return {
+		toolCallId: toolResult.toolCallId,
+		content: toolResult.content,
+		isError: toolResult.isError,
+	}
 }
 
 function toSSEChunk(event: StreamEvent): string | null {
@@ -86,11 +74,11 @@ function toSSEChunk(event: StreamEvent): string | null {
 	}
 
 	if (event.type === 'tool_call_complete') {
-		return formatSSEEvent('tool_call', {
-			id: event.toolCall.id,
-			name: event.toolCall.name,
-			arguments: event.toolCall.arguments,
-		})
+		return formatSSEEvent('tool_call', toToolCallPayload(event.toolCall))
+	}
+
+	if (event.type === 'tool_result') {
+		return formatSSEEvent('tool_result', toToolResultPayload(event.toolResult))
 	}
 
 	if (event.type === 'done') {
@@ -108,7 +96,12 @@ function toSSEChunk(event: StreamEvent): string | null {
 	return null
 }
 
-function createSSEStream(adapter: ProviderAdapter, request: z.infer<typeof chatRequestSchema>): ReadableStream<Uint8Array> {
+function createSSEStream(
+	providerRouter: ProviderRouter,
+	toolRegistry: ToolRegistry,
+	hookRegistry: HookRegistry,
+	request: z.infer<typeof chatRequestSchema>,
+): ReadableStream<Uint8Array> {
 	const abortController = new AbortController()
 	let keepaliveTimer: ReturnType<typeof setInterval> | null = null
 	let cleanedUp = false
@@ -145,15 +138,22 @@ function createSSEStream(adapter: ProviderAdapter, request: z.infer<typeof chatR
 
 			void (async () => {
 				try {
-					const tools = createStubToolDefinition(request.tools)
-					const messages = toMessageArray(request.messages)
+					await emit(hookRegistry, 'stream:start', {
+						provider: request.provider ?? 'default',
+						model: 'unknown',
+						conversationId: 'default',
+					})
 
-					for await (const streamEvent of adapter.sendMessage(messages, tools, {
-						signal: abortController.signal,
+					const agentLoop = runAgentLoop(providerRouter, toolRegistry, {
+						messages: toMessageArray(request.messages),
+						tools: toolRegistry.getAll(),
 						provider: request.provider,
-						temperature: request.temperature,
-						maxTokens: request.maxTokens,
-					})) {
+						maxIterations: request.maxIterations,
+						signal: abortController.signal,
+						hookRegistry,
+					})
+
+					for await (const streamEvent of agentLoop) {
 						if (abortController.signal.aborted) {
 							break
 						}
@@ -179,6 +179,11 @@ function createSSEStream(adapter: ProviderAdapter, request: z.infer<typeof chatR
 						)
 					}
 				} finally {
+					await emit(hookRegistry, 'stream:end', {
+						provider: request.provider ?? 'default',
+						model: 'unknown',
+						conversationId: 'default',
+					})
 					cleanup(false)
 					closeController()
 				}
@@ -192,7 +197,12 @@ function createSSEStream(adapter: ProviderAdapter, request: z.infer<typeof chatR
 	})
 }
 
-export function createConversationRoute<TApp extends Elysia>(app: TApp, providerRouter: ProviderRouter): TApp {
+export function createConversationRoute<TApp extends Elysia>(
+	app: TApp,
+	providerRouter: ProviderRouter,
+	toolRegistry: ToolRegistry,
+	hookRegistry: HookRegistry,
+): TApp {
 	app.post('/api/chat', ({ body, set }) => {
 		const parsed = chatRequestSchema.safeParse(body)
 		if (!parsed.success) {
@@ -215,7 +225,7 @@ export function createConversationRoute<TApp extends Elysia>(app: TApp, provider
 			}
 		}
 
-		const stream = createSSEStream(adapterResult.data, parsed.data)
+		const stream = createSSEStream(providerRouter, toolRegistry, hookRegistry, parsed.data)
 		return new Response(stream, {
 			headers: SSE_HEADERS,
 		})

@@ -1,6 +1,10 @@
 import { emit, HookRegistry } from '../hooks/index.ts';
 import { removePid } from './pid.ts';
 
+interface DaemonLike {
+	stop(): Promise<void>;
+}
+
 let globalHookRegistry: HookRegistry | null = null;
 let shutdownInProgress = false;
 
@@ -12,7 +16,10 @@ export function clearGlobalHookRegistry(): void {
 	globalHookRegistry = null;
 }
 
-export async function gracefulShutdown(reason: 'SIGTERM' | 'SIGINT' | 'manual'): Promise<void> {
+export async function gracefulShutdown(
+	reason: 'SIGTERM' | 'SIGINT' | 'manual',
+	daemon?: DaemonLike,
+): Promise<void> {
 	if (shutdownInProgress) {
 		console.error(`[daemon] Shutdown already in progress (${reason})`);
 		return;
@@ -26,6 +33,11 @@ export async function gracefulShutdown(reason: 'SIGTERM' | 'SIGINT' | 'manual'):
 		await emit(globalHookRegistry, 'shutdown', { reason });
 	} else {
 		console.error('[daemon] No hook registry registered, skipping shutdown hooks');
+	}
+
+	if (daemon) {
+		console.error('[daemon] Stopping daemon server');
+		await daemon.stop();
 	}
 
 	console.error('[daemon] Draining in-flight requests (stub 100ms)');

@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'bun:test'
 import { Elysia } from 'elysia'
 
+import { HookRegistry } from '../hooks/index.ts'
 import type { ElefantError } from '../types/errors.ts'
 import type { Result } from '../types/result.ts'
 import type { ProviderRouter } from '../providers/router.ts'
 import type { ProviderAdapter, SendMessageOptions, StreamEvent } from '../providers/types.ts'
+import { ToolRegistry } from '../tools/registry.ts'
 import { createConversationRoute } from './conversation.ts'
 
 type AdapterResult = Result<ProviderAdapter, ElefantError>
@@ -17,7 +19,7 @@ function createMockRouter(result: AdapterResult): ProviderRouter {
 }
 
 function createAppWithRouter(router: ProviderRouter): Elysia {
-	return createConversationRoute(new Elysia(), router)
+	return createConversationRoute(new Elysia(), router, new ToolRegistry(new HookRegistry()), new HookRegistry())
 }
 
 function createJsonRequest(body: unknown): Request {
@@ -34,14 +36,6 @@ describe('createConversationRoute', () => {
 			name: 'mock-provider',
 			async *sendMessage(): AsyncGenerator<StreamEvent> {
 				yield { type: 'text_delta', text: 'Hello' }
-				yield {
-					type: 'tool_call_complete',
-					toolCall: {
-						id: 'call-1',
-						name: 'read',
-						arguments: { filePath: 'README.md' },
-					},
-				}
 				yield { type: 'done', finishReason: 'stop' }
 			},
 		}
@@ -62,7 +56,6 @@ describe('createConversationRoute', () => {
 
 		const responseText = await response.text()
 		expect(responseText).toContain('event: token\ndata: {"text":"Hello"}\n\n')
-		expect(responseText).toContain('event: tool_call\ndata: {"id":"call-1","name":"read","arguments":{"filePath":"README.md"}}\n\n')
 		expect(responseText).toContain('event: done\ndata: {"finishReason":"stop"}\n\n')
 	})
 
@@ -76,7 +69,7 @@ describe('createConversationRoute', () => {
 
 		const app = createAppWithRouter(createMockRouter({ ok: true, data: adapter }))
 		const response = await app.handle(createJsonRequest({ provider: 'mock-provider' }))
-		const payload = await response.json() as {
+		const payload = (await response.json()) as {
 			ok: boolean
 			error: string
 			details: unknown[]

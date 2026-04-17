@@ -1,48 +1,36 @@
-import { loadConfig } from '../config/index.ts';
-import { HookRegistry } from '../hooks/index.ts';
-import { registerShellShutdownCleanup } from '../tools/index.js';
-import { removePid, writePid } from './pid.ts';
-import { gracefulShutdown, setGlobalHookRegistry } from './shutdown.ts';
+import { loadConfig } from '../config/index.ts'
+import { createDaemon } from './create.ts'
+import { removePid, writePid } from './pid.ts'
+import { gracefulShutdown } from './shutdown.ts'
 
-const configResult = await loadConfig();
+const configResult = await loadConfig()
 if (!configResult.ok) {
-	console.error('[daemon] Failed to load config:', configResult.error.message);
-	process.exit(1);
+	console.error('Config error:', configResult.error.message)
+	process.exit(1)
 }
 
-const pidWriteResult = await writePid(process.pid);
+const daemonResult = await createDaemon(configResult.data)
+if (!daemonResult.ok) {
+	console.error('Daemon error:', daemonResult.error.message)
+	process.exit(1)
+}
+
+const pidWriteResult = await writePid(process.pid)
 if (!pidWriteResult.ok) {
-	console.error('[daemon] Failed to write PID file:', pidWriteResult.error.message);
-	process.exit(1);
+	console.error('PID error:', pidWriteResult.error.message)
+	process.exit(1)
 }
 
-const hooks = new HookRegistry();
-setGlobalHookRegistry(hooks);
-registerShellShutdownCleanup(hooks);
-
-let shuttingDown = false;
-
-function handleSignal(signal: 'SIGTERM' | 'SIGINT'): void {
-	if (shuttingDown) {
-		return;
-	}
-
-	shuttingDown = true;
-	void gracefulShutdown(signal);
-}
+await daemonResult.data.start()
 
 process.on('SIGTERM', () => {
-	handleSignal('SIGTERM');
-});
+	void gracefulShutdown('SIGTERM', daemonResult.data)
+})
 
 process.on('SIGINT', () => {
-	handleSignal('SIGINT');
-});
+	void gracefulShutdown('SIGINT', daemonResult.data)
+})
 
 process.on('exit', () => {
-	void removePid();
-});
-
-await new Promise(() => {
-	// Keep the daemon alive until the server is wired in later waves.
-});
+	void removePid()
+})
