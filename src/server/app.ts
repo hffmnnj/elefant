@@ -24,7 +24,10 @@ export function createApp(
 			if (!origin) return
 
 			const isLocalOrigin =
-				origin.startsWith('http://localhost') || origin.startsWith('http://127.0.0.1')
+				origin.startsWith('http://localhost') ||
+				origin.startsWith('http://127.0.0.1') ||
+				origin === 'tauri://localhost' ||
+				origin === 'https://tauri.localhost'
 
 			if (!isLocalOrigin) {
 				set.status = 403
