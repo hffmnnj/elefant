@@ -1,5 +1,7 @@
 import { loadConfig } from '../config/index.ts';
+import { HookRegistry } from '../hooks/index.ts';
 import { removePid, writePid } from './pid.ts';
+import { gracefulShutdown, setGlobalHookRegistry } from './shutdown.ts';
 
 const configResult = await loadConfig();
 if (!configResult.ok) {
@@ -13,6 +15,9 @@ if (!pidWriteResult.ok) {
 	process.exit(1);
 }
 
+const hooks = new HookRegistry();
+setGlobalHookRegistry(hooks);
+
 let shuttingDown = false;
 
 function handleSignal(signal: 'SIGTERM' | 'SIGINT'): void {
@@ -21,11 +26,7 @@ function handleSignal(signal: 'SIGTERM' | 'SIGINT'): void {
 	}
 
 	shuttingDown = true;
-	void (async () => {
-		console.error(`[daemon] received ${signal}, stopping`);
-		await removePid();
-		process.exit(0);
-	})();
+	void gracefulShutdown(signal);
 }
 
 process.on('SIGTERM', () => {
