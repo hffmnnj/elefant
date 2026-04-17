@@ -4,6 +4,8 @@
 	import TopBar from "$lib/components/layout/TopBar.svelte";
 	import Sidebar from "$lib/components/layout/Sidebar.svelte";
 	import ChatView from "./features/chat/ChatView.svelte";
+	import SettingsView from "./features/settings/SettingsView.svelte";
+	import ModelsView from "./features/models/ModelsView.svelte";
 	import { themeStore } from "$lib/stores/theme.svelte.js";
 	import { navigationStore } from "$lib/stores/navigation.svelte.js";
 	import { connectionStore } from "$lib/stores/connection.svelte.js";
@@ -65,6 +67,10 @@
 	<!-- Content area — routed by navigation -->
 	{#if currentView === 'chat'}
 		<ChatView />
+	{:else if currentView === 'settings'}
+		<SettingsView />
+	{:else if currentView === 'models'}
+		<ModelsView />
 	{:else}
 		<div class="content-placeholder">
 			<div class="placeholder-inner">
