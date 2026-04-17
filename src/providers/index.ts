@@ -10,5 +10,6 @@ export type {
 	TextDeltaEvent,
 	ToolCallCompleteEvent,
 	ToolCallDeltaEvent,
+	ToolResultEvent,
 	ToolCallStartEvent,
 } from './types.ts'

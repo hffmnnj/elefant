@@ -28,5 +28,6 @@ export type {
 	TextDeltaEvent,
 	ToolCallCompleteEvent,
 	ToolCallDeltaEvent,
+	ToolResultEvent,
 	ToolCallStartEvent,
 } from '../providers/types.ts';

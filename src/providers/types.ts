@@ -1,6 +1,6 @@
 import type { ElefantError } from '../types/errors.ts'
 import type { Message } from '../types/providers.ts'
-import type { ToolCall, ToolDefinition } from '../types/tools.ts'
+import type { ToolCall, ToolDefinition, ToolResult } from '../types/tools.ts'
 
 export interface TextDeltaEvent {
 	type: 'text_delta'
@@ -33,12 +33,18 @@ export interface StreamErrorEvent {
 	error: ElefantError
 }
 
+export interface ToolResultEvent {
+	type: 'tool_result'
+	toolResult: ToolResult
+}
+
 export type StreamEvent =
 	| TextDeltaEvent
 	| ToolCallStartEvent
 	| ToolCallDeltaEvent
 	| ToolCallCompleteEvent
 	| StreamDoneEvent
+	| ToolResultEvent
 	| StreamErrorEvent
 
 export interface SendMessageOptions {
