@@ -1,0 +1,181 @@
+/* =========================================
+   ELEFANT DESIGN TOKENS
+   Dark mode default, light mode via [data-theme="light"]
+   ========================================= */
+
+/* --- DARK THEME (default) --- */
+:root,
+[data-theme="dark"] {
+	/* Primary — Elefant Green (user mandate) */
+	--color-primary: #28d06c;
+	--color-primary-hover: #22b85e;
+	--color-primary-muted: #1a9a4e;
+	--color-primary-subtle: #052b15;
+	--color-primary-foreground: #05140b;
+
+	/* Backgrounds */
+	--color-bg: #0a0a0a;
+	--color-surface: #111113;
+	--color-surface-elevated: #1a1a1e;
+	--color-surface-hover: #222226;
+
+	/* Borders */
+	--color-border: #27272a;
+	--color-border-strong: #3f3f46;
+	--color-border-focus: #28d06c;
+
+	/* Text */
+	--color-text-primary: #fafafa;
+	--color-text-secondary: #a1a1aa;
+	--color-text-muted: #71717a;
+	--color-text-disabled: #52525b;
+	--color-text-inverse: #09090b;
+
+	/* Semantic */
+	--color-success: #22c55e;
+	--color-warning: #f59e0b;
+	--color-error: #ef4444;
+	--color-info: #3b82f6;
+
+	/* Shadows (dark-optimized) */
+	--shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.5);
+	--shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.6);
+	--shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.7);
+	--shadow-glow: 0 0 20px rgba(40, 208, 108, 0.2);
+
+	/* shadcn-svelte CSS variable mapping */
+	--background: var(--color-bg);
+	--foreground: var(--color-text-primary);
+	--card: var(--color-surface);
+	--card-foreground: var(--color-text-primary);
+	--popover: var(--color-surface-elevated);
+	--popover-foreground: var(--color-text-primary);
+	--primary: var(--color-primary);
+	--primary-foreground: var(--color-primary-foreground);
+	--secondary: var(--color-surface-elevated);
+	--secondary-foreground: var(--color-text-primary);
+	--muted: var(--color-surface-hover);
+	--muted-foreground: var(--color-text-muted);
+	--accent: var(--color-surface-hover);
+	--accent-foreground: var(--color-text-primary);
+	--destructive: var(--color-error);
+	--destructive-foreground: #fafafa;
+	--border: var(--color-border);
+	--input: var(--color-border-strong);
+	--ring: var(--color-primary);
+}
+
+/* --- LIGHT THEME --- */
+[data-theme="light"] {
+	/* Primary — same green, works on light too */
+	--color-primary: #1db85a;
+	--color-primary-hover: #18a050;
+	--color-primary-muted: #12884a;
+	--color-primary-subtle: #dcf7e7;
+	--color-primary-foreground: #ffffff;
+
+	/* Backgrounds */
+	--color-bg: #ffffff;
+	--color-surface: #f9fafb;
+	--color-surface-elevated: #f3f4f6;
+	--color-surface-hover: #e5e7eb;
+
+	/* Borders */
+	--color-border: #e4e4e7;
+	--color-border-strong: #d4d4d8;
+	--color-border-focus: #1db85a;
+
+	/* Text */
+	--color-text-primary: #09090b;
+	--color-text-secondary: #52525b;
+	--color-text-muted: #a1a1aa;
+	--color-text-disabled: #d4d4d8;
+	--color-text-inverse: #fafafa;
+
+	/* Semantic */
+	--color-success: #16a34a;
+	--color-warning: #d97706;
+	--color-error: #dc2626;
+	--color-info: #2563eb;
+
+	/* Shadows (light-optimized) */
+	--shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.08);
+	--shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+	--shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.12);
+	--shadow-glow: 0 0 20px rgba(29, 184, 90, 0.15);
+
+	/* shadcn-svelte CSS variable mapping */
+	--background: var(--color-bg);
+	--foreground: var(--color-text-primary);
+	--card: var(--color-surface);
+	--card-foreground: var(--color-text-primary);
+	--popover: var(--color-surface-elevated);
+	--popover-foreground: var(--color-text-primary);
+	--primary: var(--color-primary);
+	--primary-foreground: var(--color-primary-foreground);
+	--secondary: var(--color-surface-elevated);
+	--secondary-foreground: var(--color-text-primary);
+	--muted: var(--color-surface-hover);
+	--muted-foreground: var(--color-text-muted);
+	--accent: var(--color-surface-hover);
+	--accent-foreground: var(--color-text-primary);
+	--destructive: var(--color-error);
+	--destructive-foreground: #ffffff;
+	--border: var(--color-border);
+	--input: var(--color-border-strong);
+	--ring: var(--color-primary);
+}
+
+/* =========================================
+   SPACING SCALE (4px base unit)
+   ========================================= */
+:root {
+	--space-1: 4px;
+	--space-2: 8px;
+	--space-3: 12px;
+	--space-4: 16px;
+	--space-5: 20px;
+	--space-6: 24px;
+	--space-7: 32px;
+	--space-8: 40px;
+	--space-9: 48px;
+	--space-10: 64px;
+	--space-11: 80px;
+	--space-12: 96px;
+}
+
+/* =========================================
+   BORDER RADIUS
+   ========================================= */
+:root {
+	--radius-none: 0px;
+	--radius-sm: 4px;
+	--radius-md: 6px;
+	--radius-lg: 8px;
+	--radius-xl: 12px;
+	--radius-2xl: 16px;
+	--radius-full: 9999px;
+
+	/* shadcn-svelte radius variable */
+	--radius: 0.5rem;
+}
+
+/* =========================================
+   TRANSITIONS
+   ========================================= */
+:root {
+	--transition-fast: 150ms ease;
+	--transition-base: 200ms ease;
+	--transition-slow: 300ms ease;
+	--transition-spring: 250ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* =========================================
+   LAYOUT DIMENSIONS
+   ========================================= */
+:root {
+	--sidebar-width: 240px;
+	--sidebar-width-collapsed: 56px;
+	--topbar-height: 48px;
+	--sidebar-collapse-breakpoint: 900px;
+}
