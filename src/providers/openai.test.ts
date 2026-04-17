@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
 import { OpenAIAdapter } from './openai.ts'
 import type { ProviderConfig } from '../types/providers.ts'
 import type { ToolDefinition } from '../types/tools.ts'
+import type { StreamEvent } from './types.ts'
 import { ok } from '../types/result.ts'
 
 const OPENAI_CONFIG: ProviderConfig = {
@@ -52,15 +53,21 @@ function createSseResponse(chunks: string[], status = 200): Response {
 	})
 }
 
-async function collectEvents(adapter: OpenAIAdapter): Promise<Array<{ type: string } & Record<string, unknown>>> {
-	const events: Array<{ type: string } & Record<string, unknown>> = []
+async function collectEvents(adapter: OpenAIAdapter): Promise<StreamEvent[]> {
+	const events: StreamEvent[] = []
 	for await (const event of adapter.sendMessage([{ role: 'user', content: 'hello' }], TEST_TOOLS)) {
-		events.push(event as { type: string } & Record<string, unknown>)
+		events.push(event)
 	}
 	return events
 }
 
-describe('OpenAIAdapter', () => {
+type MockFetchFunction = (...args: Parameters<typeof fetch>) => ReturnType<typeof fetch>
+
+function withMockPreconnect(mockFetch: MockFetchFunction, originalFetch: typeof fetch): typeof fetch {
+	return Object.assign(mockFetch, { preconnect: originalFetch.preconnect }) as unknown as typeof fetch
+}
+
+	describe('OpenAIAdapter', () => {
 	const originalFetch = globalThis.fetch
 
 	beforeEach(() => {
@@ -72,12 +79,15 @@ describe('OpenAIAdapter', () => {
 	})
 
 	it('streams text deltas and emits done on [DONE]', async () => {
-		globalThis.fetch = async () =>
-			createSseResponse([
-				'data: {"choices":[{"delta":{"content":"Hel"},"finish_reason":null}]}\n\n',
-				'data: {"choices":[{"delta":{"content":"lo"},"finish_reason":null}]}\n\n',
-				'data: [DONE]\n\n',
-			])
+		globalThis.fetch = withMockPreconnect(
+			async () =>
+				createSseResponse([
+					'data: {"choices":[{"delta":{"content":"Hel"},"finish_reason":null}]}\n\n',
+					'data: {"choices":[{"delta":{"content":"lo"},"finish_reason":null}]}\n\n',
+					'data: [DONE]\n\n',
+				]),
+			originalFetch,
+		)
 
 		const adapter = new OpenAIAdapter(OPENAI_CONFIG)
 		const events = await collectEvents(adapter)
@@ -89,12 +99,15 @@ describe('OpenAIAdapter', () => {
 	})
 
 	it('accumulates streamed tool call arguments and emits completion', async () => {
-		globalThis.fetch = async () =>
-			createSseResponse([
-				'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_1","function":{"name":"get_weather","arguments":"{\\"city\\":\\"San"}}]},"finish_reason":null}]}\n\n',
-				'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":" Francisco\\"}"}}]},"finish_reason":null}]}\n\n',
-				'data: {"choices":[{"delta":{},"finish_reason":"tool_calls"}]}\n\n',
-			])
+		globalThis.fetch = withMockPreconnect(
+			async () =>
+				createSseResponse([
+					'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_1","function":{"name":"get_weather","arguments":"{\\"city\\":\\"San"}}]},"finish_reason":null}]}\n\n',
+					'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":" Francisco\\"}"}}]},"finish_reason":null}]}\n\n',
+					'data: {"choices":[{"delta":{},"finish_reason":"tool_calls"}]}\n\n',
+				]),
+			originalFetch,
+		)
 
 		const adapter = new OpenAIAdapter(OPENAI_CONFIG)
 		const events = await collectEvents(adapter)
@@ -114,27 +127,37 @@ describe('OpenAIAdapter', () => {
 	})
 
 	it('emits typed error when provider returns non-2xx', async () => {
-		globalThis.fetch = async () =>
-			new Response('upstream denied', {
-				status: 401,
-			})
+		globalThis.fetch = withMockPreconnect(
+			async () =>
+				new Response('upstream denied', {
+					status: 401,
+				}),
+			originalFetch,
+		)
 
 		const adapter = new OpenAIAdapter(OPENAI_CONFIG)
 		const events = await collectEvents(adapter)
 
 		expect(events).toHaveLength(1)
 		expect(events[0].type).toBe('error')
-		expect((events[0].error as { code: string }).code).toBe('PROVIDER_ERROR')
+		if (events[0].type === 'error') {
+			expect(events[0].error.code).toBe('PROVIDER_ERROR')
+		}
 	})
 
 	it('emits typed error when chunk is malformed JSON', async () => {
-		globalThis.fetch = async () => createSseResponse(['data: {not-json}\n\n'])
+		globalThis.fetch = withMockPreconnect(
+			async () => createSseResponse(['data: {not-json}\n\n']),
+			originalFetch,
+		)
 
 		const adapter = new OpenAIAdapter(OPENAI_CONFIG)
 		const events = await collectEvents(adapter)
 
 		expect(events).toHaveLength(1)
 		expect(events[0].type).toBe('error')
-		expect((events[0].error as { code: string }).code).toBe('PROVIDER_ERROR')
+		if (events[0].type === 'error') {
+			expect(events[0].error.code).toBe('PROVIDER_ERROR')
+		}
 	})
 })

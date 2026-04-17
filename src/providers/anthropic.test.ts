@@ -61,6 +61,12 @@ async function collectEvents(adapter: AnthropicAdapter): Promise<StreamEvent[]> 
 	return events
 }
 
+type MockFetchFunction = (...args: Parameters<typeof fetch>) => ReturnType<typeof fetch>
+
+function withMockPreconnect(mockFetch: MockFetchFunction, originalFetch: typeof fetch): typeof fetch {
+	return Object.assign(mockFetch, { preconnect: originalFetch.preconnect }) as unknown as typeof fetch
+}
+
 describe('AnthropicAdapter', () => {
 	const originalFetch = globalThis.fetch
 
@@ -73,11 +79,14 @@ describe('AnthropicAdapter', () => {
 	})
 
 	it('streams text deltas and emits done on message_stop', async () => {
-		globalThis.fetch = async () =>
-			createSseResponse([
-				'event: content_block_delta\ndata: {"type":"text_delta","text":"Hi"}\n\n',
-				'event: message_stop\ndata: {}\n\n',
-			])
+		globalThis.fetch = withMockPreconnect(
+			async () =>
+				createSseResponse([
+					'event: content_block_delta\ndata: {"type":"text_delta","text":"Hi"}\n\n',
+					'event: message_stop\ndata: {}\n\n',
+				]),
+			originalFetch,
+		)
 
 		const adapter = new AnthropicAdapter(ANTHROPIC_CONFIG)
 		const events = await collectEvents(adapter)
@@ -89,14 +98,17 @@ describe('AnthropicAdapter', () => {
 	})
 
 	it('normalizes tool_use streaming into unified tool call events', async () => {
-		globalThis.fetch = async () =>
-			createSseResponse([
-				'event: content_block_start\ndata: {"index":0,"content_block":{"type":"tool_use","id":"tool_1","name":"get_weather"}}\n\n',
-				'event: content_block_delta\ndata: {"index":0,"delta":{"type":"input_json_delta","partial_json":"{\\"city\\":\\"San"}}\n\n',
-				'event: content_block_delta\ndata: {"index":0,"delta":{"type":"input_json_delta","partial_json":" Francisco\\"}"}}\n\n',
-				'event: content_block_stop\ndata: {"index":0}\n\n',
-				'event: message_delta\ndata: {"delta":{"stop_reason":"tool_use"}}\n\n',
-			])
+		globalThis.fetch = withMockPreconnect(
+			async () =>
+				createSseResponse([
+					'event: content_block_start\ndata: {"index":0,"content_block":{"type":"tool_use","id":"tool_1","name":"get_weather"}}\n\n',
+					'event: content_block_delta\ndata: {"index":0,"delta":{"type":"input_json_delta","partial_json":"{\\"city\\":\\"San"}}\n\n',
+					'event: content_block_delta\ndata: {"index":0,"delta":{"type":"input_json_delta","partial_json":" Francisco\\"}"}}\n\n',
+					'event: content_block_stop\ndata: {"index":0}\n\n',
+					'event: message_delta\ndata: {"delta":{"stop_reason":"tool_use"}}\n\n',
+				]),
+			originalFetch,
+		)
 
 		const adapter = new AnthropicAdapter(ANTHROPIC_CONFIG)
 		const events = await collectEvents(adapter)
@@ -117,10 +129,13 @@ describe('AnthropicAdapter', () => {
 
 	it('maps system and tool messages into Anthropic request format', async () => {
 		let capturedBody = ''
-		globalThis.fetch = async (_input, init) => {
-			capturedBody = typeof init?.body === 'string' ? init.body : ''
-			return createSseResponse(['event: message_stop\ndata: {}\n\n'])
-		}
+		globalThis.fetch = withMockPreconnect(
+			async (_input, init) => {
+				capturedBody = typeof init?.body === 'string' ? init.body : ''
+				return createSseResponse(['event: message_stop\ndata: {}\n\n'])
+			},
+			originalFetch,
+		)
 
 		const adapter = new AnthropicAdapter(ANTHROPIC_CONFIG)
 		for await (const _event of adapter.sendMessage(
@@ -153,7 +168,10 @@ describe('AnthropicAdapter', () => {
 	})
 
 	it('emits typed error when provider returns non-2xx', async () => {
-		globalThis.fetch = async () => new Response('invalid key', { status: 403 })
+		globalThis.fetch = withMockPreconnect(
+			async () => new Response('invalid key', { status: 403 }),
+			originalFetch,
+		)
 
 		const adapter = new AnthropicAdapter(ANTHROPIC_CONFIG)
 		const events = await collectEvents(adapter)
