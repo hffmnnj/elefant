@@ -80,7 +80,7 @@
 <div class="chat-view">
 	<!-- Header with provider selector -->
 	<div class="chat-header">
-		<h2 class="chat-title">Chat</h2>
+		<h2 class="chat-title industrial-caps">Chat</h2>
 		<ProviderSelector />
 	</div>
 
@@ -91,7 +91,7 @@
 
 	<!-- Advanced options (collapsible) -->
 	{#if showAdvanced}
-		<div class="advanced-section">
+		<div class="advanced-section glass-sm">
 			<AdvancedOptions />
 		</div>
 	{/if}
@@ -99,7 +99,7 @@
 	<!-- Input area -->
 	<div class="chat-input-area">
 		<button
-			class="advanced-toggle"
+			class="advanced-toggle mono-label"
 			onclick={() => (showAdvanced = !showAdvanced)}
 			aria-label="Toggle advanced options"
 			aria-expanded={showAdvanced}
@@ -135,10 +135,8 @@
 	}
 
 	.chat-title {
-		font-size: var(--font-size-lg);
-		font-weight: var(--font-weight-semibold);
+		font-size: var(--font-size-sm);
 		color: var(--color-text-primary);
-		letter-spacing: var(--tracking-snug);
 		margin: 0;
 	}
 
@@ -152,7 +150,8 @@
 	.advanced-section {
 		padding: var(--space-3) var(--space-5);
 		border-top: 1px solid var(--color-border);
-		background-color: var(--color-surface);
+		margin: 0 var(--space-3);
+		border-radius: var(--radius-md);
 	}
 
 	.chat-input-area {
@@ -169,10 +168,8 @@
 		border: none;
 		cursor: pointer;
 		color: var(--color-text-muted);
-		font-size: var(--font-size-sm);
 		text-align: left;
 		padding: var(--space-1) 0;
-		font-family: var(--font-sans);
 		transition: color var(--transition-fast);
 	}
 

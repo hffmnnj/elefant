@@ -2,6 +2,7 @@
 	import { connectionStore } from '$lib/stores/connection.svelte.js';
 	import { configService } from '$lib/services/config-service.js';
 	import { daemonLifecycle } from '$lib/services/daemon-lifecycle.js';
+	import Spinner from '$lib/components/ui/spinner/Spinner.svelte';
 	import { onMount } from 'svelte';
 
 	type Step = 'welcome' | 'provider' | 'starting';
@@ -129,7 +130,7 @@
 			<div class="form">
 				<!-- Format -->
 				<div class="field">
-					<label class="label" for="ob-format">Provider type</label>
+					<label class="label mono-label" for="ob-format">Provider type</label>
 					<div class="format-pills">
 						<button
 							class="pill"
@@ -150,7 +151,7 @@
 
 				<!-- API Key -->
 				<div class="field">
-					<label class="label" for="ob-apikey">API Key</label>
+					<label class="label mono-label" for="ob-apikey">API Key</label>
 					<div class="key-row">
 						<input
 							id="ob-apikey"
@@ -182,7 +183,7 @@
 
 				<!-- Model -->
 				<div class="field">
-					<label class="label" for="ob-model">Model</label>
+					<label class="label mono-label" for="ob-model">Model</label>
 					<input
 						id="ob-model"
 						type="text"
@@ -195,7 +196,7 @@
 				<!-- Base URL (collapsed by default for Anthropic) -->
 				{#if format === 'openai'}
 					<div class="field">
-						<label class="label" for="ob-baseurl">Base URL</label>
+						<label class="label mono-label" for="ob-baseurl">Base URL</label>
 						<input
 							id="ob-baseurl"
 							type="url"
@@ -222,7 +223,7 @@
 		</div>
 	{:else if step === 'starting'}
 		<div class="step">
-			<div class="spinner" aria-hidden="true"></div>
+			<Spinner size="lg" />
 			<h2 class="heading">Starting daemon…</h2>
 			<p class="body">
 				The daemon is picking up your configuration. This usually takes a few seconds.
@@ -304,8 +305,6 @@
 	}
 
 	.label {
-		font-size: var(--font-size-sm);
-		font-weight: var(--font-weight-medium);
 		color: var(--color-text-secondary);
 	}
 
@@ -445,19 +444,6 @@
 
 	.btn-ghost-link:hover {
 		color: var(--color-text-secondary);
-	}
-
-	.spinner {
-		width: 40px;
-		height: 40px;
-		border: 3px solid var(--color-border);
-		border-top-color: var(--color-primary);
-		border-radius: 50%;
-		animation: spin 0.8s linear infinite;
-	}
-
-	@keyframes spin {
-		to { transform: rotate(360deg); }
 	}
 
 	code {
