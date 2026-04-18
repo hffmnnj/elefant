@@ -105,7 +105,19 @@
 					</button>
 
 					{#if showPatch}
-						<pre class="patch-raw">{#if parsedDiff}{patchText}{:else}{patchPreviewLines().join('\n')}{#if patchTotalLines > 20}{'\n'}... ({patchTotalLines - 20} more lines){/if}{/if}</pre>
+						<div class="patch-preview">
+							{#if parsedDiff}
+								{#await import('$lib/components/DiffViewer.svelte') then { default: DiffViewer }}
+									<DiffViewer
+										original={parsedDiff.original}
+										modified={parsedDiff.modified}
+										mode="unified"
+									/>
+								{/await}
+							{:else}
+								<pre class="patch-raw">{patchPreviewLines().join('\n')}{#if patchTotalLines > 20}{'\n'}... ({patchTotalLines - 20} more lines){/if}</pre>
+							{/if}
+						</div>
 					{/if}
 				{/if}
 			</div>

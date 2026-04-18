@@ -71,7 +71,10 @@
 	{#snippet children()}
 		{#if status === 'success' && content}
 			<div class="lsp-body">
-				{#if operation === 'hover'}
+				<!-- Supported operations: hover, goToDefinition, findReferences, documentSymbol, workspaceSymbol.
+				 'diagnostics' is not a current daemon LSP operation (src/tools/lsp/index.ts) —
+				 if a future version adds it, it falls through to the raw fallback branch. -->
+			{#if operation === 'hover'}
 					<pre class="lsp-hover">{content}</pre>
 				{:else if operation === 'goToDefinition' || operation === 'findReferences'}
 					{#if locations.length === 0}

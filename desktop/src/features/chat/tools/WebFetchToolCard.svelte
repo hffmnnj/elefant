@@ -2,6 +2,8 @@
 	import type { ToolCardProps } from './types.js';
 	import ToolCardShell from './ToolCardShell.svelte';
 
+	// webfetch returns plain text/markdown, no title field — URL is the primary identifier
+
 	let { toolCall }: ToolCardProps = $props();
 
 	const status = $derived<'running' | 'success' | 'error'>(
@@ -48,19 +50,23 @@
 	subtitle={truncatedUrl || undefined}
 >
 	{#snippet children()}
-		{#if status === 'success' && content}
+		{#if status === 'success'}
 			<div class="fetch-body">
 				<div class="fetch-url">{url}</div>
-				{#if previewLines().length > 0}
-					<div class="fetch-preview">
-						{#each previewLines() as line}
-							<div class="fetch-preview-line">{line}</div>
-						{/each}
+				{#if !content || content.length < 10}
+					<p class="no-content">No content retrieved</p>
+				{:else}
+					{#if previewLines().length > 0}
+						<div class="fetch-preview">
+							{#each previewLines() as line}
+								<div class="fetch-preview-line">{line}</div>
+							{/each}
+						</div>
+					{/if}
+					<div class="fetch-caption">
+						{wordCount.toLocaleString()} word{wordCount === 1 ? '' : 's'} fetched
 					</div>
 				{/if}
-				<div class="fetch-caption">
-					{wordCount.toLocaleString()} word{wordCount === 1 ? '' : 's'} fetched
-				</div>
 			</div>
 		{/if}
 	{/snippet}
@@ -96,6 +102,13 @@
 		overflow: hidden;
 		white-space: nowrap;
 		text-overflow: ellipsis;
+	}
+
+	.no-content {
+		font-size: var(--font-size-sm);
+		color: var(--color-text-muted);
+		font-style: italic;
+		margin: 0;
 	}
 
 	.fetch-caption {
