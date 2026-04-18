@@ -1,11 +1,15 @@
 import type { ElefantConfig } from '../config/index.ts'
+import { Database } from '../db/database.ts'
 import { HookRegistry } from '../hooks/index.ts'
+import { ProjectManager } from '../project/manager.ts'
+import type { ProjectInfo } from '../project/types.ts'
 import { ProviderRouter } from '../providers/router.ts'
 import { createApp } from '../server/app.ts'
 import { createToolRegistry } from '../tools/registry.ts'
 import { sessionManager } from '../tools/shell/index.js'
 import type { ElefantError } from '../types/errors.ts'
 import { err, ok, type Result } from '../types/result.ts'
+import type { DaemonContext } from './context.ts'
 import { setGlobalHookRegistry } from './shutdown.ts'
 
 export interface ElefantDaemon {
@@ -36,10 +40,33 @@ export async function createDaemon(config: ElefantConfig): Promise<Result<Elefan
 		)
 	}
 
+	// A. Bootstrap .elefant/ directory
+	const bootstrapResult = await ProjectManager.bootstrap(config.projectPath)
+	if (!bootstrapResult.ok) {
+		return err(toConfigError('Failed to bootstrap project directory', bootstrapResult.error))
+	}
+	const projectInfo: ProjectInfo = bootstrapResult.data
+
+	// B. Initialize SQLite database
+	const db = new Database(projectInfo.dbPath)
+
+	// C. Build DaemonContext (for later use by StateManager, plugins, etc.)
+	// Note: this context will be EXPANDED in future tasks (Wave 2, 3, 4, 5)
+	// For now, it holds project + db. Hooks and tools are already created above.
+	const context: DaemonContext = {
+		config,
+		hooks: hookRegistry,
+		tools: toolRegistry,
+		providers: providerRouter,
+		project: projectInfo,
+		db,
+	}
+
 	const app = createApp(providerRouter, toolRegistry, hookRegistry)
 
 	hookRegistry.register('shutdown', async () => {
 		await sessionManager.closeAll()
+		db.close()
 	})
 
 	setGlobalHookRegistry(hookRegistry)
@@ -51,6 +78,7 @@ export async function createDaemon(config: ElefantConfig): Promise<Result<Elefan
 		},
 		stop: async () => {
 			await app.stop()
+			db.close()
 		},
 	})
 }
