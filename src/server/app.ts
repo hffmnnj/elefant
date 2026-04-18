@@ -16,7 +16,7 @@ export function createApp(
 	hookRegistry: HookRegistry,
 	ws?: ElefantWsServer,
 	sse?: SseManager,
-): Elysia {
+) {
 	const CORS_HEADERS = {
 		'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
 		'Access-Control-Allow-Headers': 'Content-Type, Accept, Authorization',
@@ -81,3 +81,10 @@ export function createApp(
 
 	return baseApp
 }
+
+/**
+ * The fully-typed Elysia app instance with all routes.
+ * Exported for Eden Treaty type inference on the client side.
+ * Usage: `import type { App } from 'elefant'`
+ */
+export type App = ReturnType<typeof createApp>
