@@ -19,8 +19,13 @@
 	import SettingsView from "./features/settings/SettingsView.svelte";
 	import ModelsView from "./features/models/ModelsView.svelte";
 	import AboutView from "./features/about/AboutView.svelte";
+	import OnboardingView from "./features/onboarding/OnboardingView.svelte";
 
 	let sidebarCollapsed = $state(false);
+
+	// Whether the user has a real (non-placeholder) provider configured.
+	// Drives the onboarding gate.
+	let hasConfig = $state<boolean | null>(null); // null = still loading
 
 	function toggleSidebar(): void {
 		sidebarCollapsed = !sidebarCollapsed;
@@ -47,12 +52,14 @@
 		// Start connection health polling
 		connectionStore.start();
 
-		// Load available providers for the chat provider selector
+		// Load available providers + check onboarding gate
 		configService.readConfig().then((config) => {
-			if (config && config.providers.length > 0) {
+			const realProviders = config?.providers?.filter((p) => p.apiKey !== 'YOUR_API_KEY_HERE') ?? [];
+			hasConfig = realProviders.length > 0;
+			if (realProviders.length > 0) {
 				chatStore.setAvailableProviders(
-					config.providers.map((p) => p.name),
-					config.defaultProvider,
+					realProviders.map((p) => p.name),
+					config?.defaultProvider ?? realProviders[0].name,
 				);
 			}
 		});
@@ -111,8 +118,12 @@
 		</TopBar>
 	{/snippet}
 
-	<!-- View routing -->
-	{#if currentView === "chat"}
+	<!-- Onboarding gate: show setup flow until a real provider is configured -->
+	{#if hasConfig === null}
+		<!-- Still loading config — blank to avoid flash -->
+	{:else if hasConfig === false}
+		<OnboardingView />
+	{:else if currentView === "chat"}
 		<ChatView />
 	{:else if currentView === "settings"}
 		<SettingsView />

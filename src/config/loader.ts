@@ -112,8 +112,47 @@ async function loadJsonConfig(path: string): Promise<Result<RawConfig, ElefantEr
 	}
 }
 
+const DEFAULT_CONFIG_PATH = join(homedir(), ".config", "elefant", "elefant.config.json");
+
+const DEFAULT_CONFIG_TEMPLATE: RawConfig = {
+	port: 1337,
+	providers: [
+		{
+			name: "my-provider",
+			baseURL: "https://api.anthropic.com",
+			apiKey: "YOUR_API_KEY_HERE",
+			model: "claude-sonnet-4-5",
+			format: "anthropic",
+		},
+	],
+	defaultProvider: "my-provider",
+	logLevel: "info",
+};
+
+/**
+ * Write a default config template to ~/.config/elefant/elefant.config.json.
+ * Called on first run when no config exists anywhere.
+ */
+async function writeDefaultConfig(): Promise<void> {
+	const dir = join(homedir(), ".config", "elefant");
+	// Bun.write creates parent directories automatically
+	await Bun.write(DEFAULT_CONFIG_PATH, JSON.stringify(DEFAULT_CONFIG_TEMPLATE, null, 2) + "\n");
+	void dir; // suppress unused warning
+}
+
+/**
+ * Check whether the config is still the default template
+ * (i.e. the user hasn't replaced the placeholder API key yet).
+ * Accepts both RawConfig and validated ElefantConfig shapes.
+ */
+export function isDefaultConfig(config: { providers?: Array<{ apiKey: string }> }): boolean {
+	return config.providers?.some((p) => p.apiKey === "YOUR_API_KEY_HERE") ?? false;
+}
+
 /**
  * Discover and load the first available config file.
+ * On first run (no config found anywhere), writes a default template to
+ * ~/.config/elefant/elefant.config.json and returns a friendly error.
  */
 async function discoverAndLoadConfig(): Promise<Result<RawConfig, ElefantError>> {
 	const searchPaths = getSearchPaths();
@@ -127,10 +166,20 @@ async function discoverAndLoadConfig(): Promise<Result<RawConfig, ElefantError>>
 			}
 		}
 	}
+
+	// First run — write a template so the user has something to edit.
+	try {
+		await writeDefaultConfig();
+		console.error(`\nFirst run: created default config at ${DEFAULT_CONFIG_PATH}`);
+		console.error("Open Elefant, go to Settings → Providers, and add your API key.\n");
+	} catch (writeErr) {
+		const msg = writeErr instanceof Error ? writeErr.message : String(writeErr);
+		console.error(`Could not write default config: ${msg}`);
+	}
 	
 	return err({
 		code: "CONFIG_INVALID",
-		message: "No elefant.config.ts or elefant.config.json found in project root or ~/.config/elefant/",
+		message: `No config found. A template was created at ${DEFAULT_CONFIG_PATH} — add your API key in Settings and restart.`,
 	});
 }
 

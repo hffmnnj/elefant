@@ -6,15 +6,22 @@
 	} from '$lib/services/daemon-lifecycle.js';
 	import { settingsStore } from '$lib/stores/settings.svelte.js';
 	import { connectionStore } from '$lib/stores/connection.svelte.js';
+	import { configService } from '$lib/services/config-service.js';
+	import { navigationStore } from '$lib/stores/navigation.svelte.js';
 
 	let daemonStatus = $state<DaemonLifecycleStatus>('unknown');
 	let isStarting = $state(false);
 	let isStopping = $state(false);
 	let actionError = $state<string | null>(null);
 	let autoStart = $state(settingsStore.autoStartDaemon);
+	let configIsPlaceholder = $state(false);
 
 	onMount(async () => {
 		daemonStatus = await daemonLifecycle.getDaemonStatus();
+		const config = await configService.readConfig();
+		configIsPlaceholder =
+			!config?.providers?.length ||
+			config.providers.every((p) => p.apiKey === 'YOUR_API_KEY_HERE');
 	});
 
 	$effect(() => {
@@ -80,7 +87,9 @@
 				: daemonStatus === 'stopping'
 					? 'Stopping...'
 					: daemonStatus === 'stopped'
-						? 'Stopped'
+						? configIsPlaceholder
+							? 'Stopped — needs API key'
+							: 'Stopped'
 						: 'Unknown',
 	);
 </script>
@@ -120,6 +129,18 @@
 				</button>
 			</div>
 		</div>
+
+		{#if configIsPlaceholder}
+			<div class="info-message" role="note">
+				<span aria-hidden="true">ℹ</span>
+				No API key configured. Go to
+				<button
+					class="inline-link"
+					onclick={() => navigationStore.navigate('settings')}
+				>Providers</button>
+				and add one, then start the daemon.
+			</div>
+		{/if}
 
 		{#if actionError}
 			<div class="error-message" role="alert">
@@ -247,6 +268,35 @@
 	.btn-control:disabled {
 		opacity: 0.4;
 		cursor: not-allowed;
+	}
+
+	.info-message {
+		display: flex;
+		align-items: flex-start;
+		gap: var(--space-2);
+		font-size: var(--font-size-sm);
+		color: var(--color-text-secondary);
+		padding: var(--space-2) var(--space-3);
+		background-color: var(--color-surface-elevated);
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-md);
+		line-height: var(--line-height-base);
+	}
+
+	.inline-link {
+		background: none;
+		border: none;
+		padding: 0;
+		color: var(--color-primary);
+		cursor: pointer;
+		font-size: inherit;
+		font-family: inherit;
+		text-decoration: underline;
+		text-underline-offset: 2px;
+	}
+
+	.inline-link:hover {
+		color: var(--color-primary-hover);
 	}
 
 	.error-message {

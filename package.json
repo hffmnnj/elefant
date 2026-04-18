@@ -4,8 +4,10 @@
   "description": "Bun-native agent daemon with Elysia and TypeScript",
   "type": "module",
   "scripts": {
-    "dev": "bun run --watch bin/elefant.ts",
-    "start": "bun run bin/elefant.ts",
+    "dev": "bun run --watch src/daemon/server-entry.ts",
+    "start": "bun run bin/elefant.ts start",
+    "stop": "bun run bin/elefant.ts stop",
+    "status": "bun run bin/elefant.ts status",
     "build": "bun build --target bun --outdir dist bin/elefant.ts",
     "test": "bun test",
     "typecheck": "tsc --noEmit"

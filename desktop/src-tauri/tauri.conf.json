@@ -41,19 +41,12 @@
       "icons/icon.ico"
     ],
     "macOS": {
-      "category": "public.app-category.developer-tools",
       "minimumSystemVersion": "10.15"
-    },
-    "windows": {
-      "certificateThumbprint": null,
-      "digestAlgorithm": "sha256",
-      "timestampUrl": ""
     }
   },
   "plugins": {
     "shell": {
-      "open": true,
-      "sidecar": false
+      "open": true
     }
   }
 }
