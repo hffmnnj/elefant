@@ -1,4 +1,5 @@
 import { emit, type HookRegistry } from '../hooks/index.ts'
+import type { PermissionGate } from '../permissions/gate.ts'
 import type { ProviderRouter } from '../providers/router.ts'
 import type { StreamEvent } from '../providers/types.ts'
 import type { ElefantError } from '../types/errors.ts'
@@ -17,6 +18,8 @@ export interface AgentLoopOptions {
 	maxIterations?: number
 	signal?: AbortSignal
 	hookRegistry: HookRegistry
+	permissions?: PermissionGate
+	conversationId?: string
 }
 
 function createToolResult(toolCallId: string, content: string, isError: boolean): ToolResult {
@@ -106,6 +109,38 @@ export async function* runAgentLoop(
 
 		for (const toolCall of pendingToolCalls) {
 			yield { type: 'tool_call_complete', toolCall }
+
+			// Permission gate check before tool execution
+			if (options.permissions && options.conversationId) {
+				const permResult = await options.permissions.check(
+					toolCall.name,
+					toolCall.arguments as Record<string, unknown>,
+					options.conversationId,
+				)
+
+				if (!permResult.ok || !permResult.data.approved) {
+					const reason = permResult.ok
+						? permResult.data.reason
+						: permResult.error.message
+					const toolResult = createToolResult(
+						toolCall.id,
+						`Tool call denied: ${reason}`,
+						true,
+					)
+
+					yield {
+						type: 'tool_result',
+						toolResult,
+					}
+
+					messages.push({
+						role: 'tool',
+						content: toolResult.content,
+						toolCallId: toolResult.toolCallId,
+					})
+					continue
+				}
+			}
 
 			const executeResult = await registry.execute(toolCall.name, toolCall.arguments)
 			const toolResult = createToolResult(
