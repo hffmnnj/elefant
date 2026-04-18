@@ -24,8 +24,12 @@ export const navigationStore = {
 	isActive(view: View): boolean {
 		return currentView === view;
 	},
+	goToProjectPicker(): void {
+		currentView = "projects";
+	},
 };
 
+/** @deprecated Use `navigationStore.goToProjectPicker()` instead. */
 export function goToProjectPicker(): void {
 	currentView = "projects";
 }
