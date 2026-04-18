@@ -1,6 +1,8 @@
 <script lang="ts">
 	import type { ProviderEntry } from '$lib/daemon/types.js';
 	import { getDaemonClient } from '$lib/daemon/client.js';
+	import Tag from '$lib/components/ui/tag/Tag.svelte';
+	import Spinner from '$lib/components/ui/spinner/Spinner.svelte';
 
 	type Props = {
 		provider: ProviderEntry;
@@ -35,25 +37,21 @@
 	}
 </script>
 
-<li class="provider-card">
+<li class="provider-card glass-sm">
 	<div class="card-main">
 		<div class="card-info">
 			<div class="card-header">
 				<span class="provider-name">{provider.name}</span>
-				<span
-					class="provider-badge"
-					class:openai={provider.format === 'openai'}
-					class:anthropic={provider.format === 'anthropic'}
-				>
+				<Tag variant={provider.format === 'anthropic' ? 'warning' : 'primary'}>
 					{provider.format === 'openai' ? 'OpenAI' : 'Anthropic'}
-				</span>
+				</Tag>
 			</div>
 			<div class="card-details">
-				<span class="detail-label">Model</span>
+				<span class="detail-label mono-label">Model</span>
 				<span class="detail-value model-name">{provider.model}</span>
 			</div>
 			<div class="card-details">
-				<span class="detail-label">Base URL</span>
+				<span class="detail-label mono-label">Base URL</span>
 				<span class="detail-value base-url">{provider.baseURL}</span>
 			</div>
 		</div>
@@ -66,7 +64,7 @@
 				aria-label={`Test connection for ${provider.name}`}
 			>
 				{#if testStatus === 'testing'}
-					Testing...
+					<Spinner size="sm" /> Testing…
 				{:else}
 					Test Connection
 				{/if}
@@ -90,8 +88,6 @@
 
 <style>
 	.provider-card {
-		background-color: var(--color-surface);
-		border: 1px solid var(--color-border);
 		border-radius: var(--radius-lg);
 		padding: var(--space-4) var(--space-5);
 		transition:
@@ -132,25 +128,6 @@
 		color: var(--color-text-primary);
 	}
 
-	.provider-badge {
-		font-size: var(--font-size-xs);
-		padding: 2px 8px;
-		border-radius: var(--radius-full);
-		font-weight: var(--font-weight-medium);
-	}
-
-	.provider-badge.openai {
-		background-color: color-mix(in oklch, var(--color-info) 12%, transparent);
-		color: var(--color-info);
-		border: 1px solid color-mix(in oklch, var(--color-info) 25%, transparent);
-	}
-
-	.provider-badge.anthropic {
-		background-color: color-mix(in oklch, var(--color-warning) 12%, transparent);
-		color: var(--color-warning);
-		border: 1px solid color-mix(in oklch, var(--color-warning) 25%, transparent);
-	}
-
 	.card-details {
 		display: flex;
 		align-items: center;
@@ -158,11 +135,7 @@
 	}
 
 	.detail-label {
-		font-size: var(--font-size-xs);
 		color: var(--color-text-muted);
-		text-transform: uppercase;
-		letter-spacing: var(--tracking-wider);
-		font-weight: var(--font-weight-medium);
 		min-width: 56px;
 	}
 

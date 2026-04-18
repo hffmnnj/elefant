@@ -16,14 +16,14 @@
 
 <div class="settings-view">
 	<div class="settings-header">
-		<h2 class="settings-title">Settings</h2>
+		<h2 class="settings-title industrial-caps">Settings</h2>
 	</div>
 
 	<div class="settings-layout">
 		<nav class="settings-nav" aria-label="Settings sections">
 			{#each sections as section}
 				<button
-					class="settings-nav-item"
+					class="settings-nav-item mono-label"
 					class:active={activeSection === section.id}
 					onclick={() => (activeSection = section.id)}
 					aria-current={activeSection === section.id ? 'page' : undefined}
@@ -61,10 +61,8 @@
 	}
 
 	.settings-title {
-		font-size: var(--font-size-xl);
-		font-weight: var(--font-weight-semibold);
+		font-size: var(--font-size-sm);
 		color: var(--color-text-primary);
-		letter-spacing: var(--tracking-snug);
 	}
 
 	.settings-layout {
@@ -94,12 +92,11 @@
 		border-radius: var(--radius-md);
 		background: transparent;
 		color: var(--color-text-secondary);
-		font-family: var(--font-sans);
-		font-size: var(--font-size-md);
 		cursor: pointer;
 		transition:
 			color var(--transition-fast),
-			background-color var(--transition-fast);
+			background-color var(--transition-fast),
+			box-shadow var(--transition-fast);
 	}
 
 	.settings-nav-item:hover {
@@ -111,6 +108,7 @@
 		color: var(--color-primary);
 		background-color: var(--color-primary-subtle);
 		font-weight: var(--font-weight-medium);
+		box-shadow: var(--glow-primary);
 	}
 
 	.settings-content {

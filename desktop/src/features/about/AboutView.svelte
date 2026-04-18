@@ -1,11 +1,23 @@
 <script lang="ts">
+	import Tag from '$lib/components/ui/tag/Tag.svelte';
+
 	const version = '0.1.0';
 	const repoUrl = 'https://github.com/hffmnnj/elefant';
+
+	const stack = [
+		{ name: 'Tauri v2', desc: 'Desktop framework' },
+		{ name: 'Svelte 5', desc: 'UI framework (runes)' },
+		{ name: 'Bun + Elysia', desc: 'Agent daemon' },
+		{ name: 'CodeMirror 6', desc: 'Diff viewer' },
+		{ name: 'Shiki', desc: 'Syntax highlighting' },
+		{ name: 'shadcn-svelte', desc: 'Components' },
+		{ name: 'TailwindCSS v4', desc: 'Styling' },
+	];
 </script>
 
 <div class="about-view">
 	<div class="about-header">
-		<h2 class="about-title">About</h2>
+		<h2 class="about-title industrial-caps">About</h2>
 	</div>
 
 	<div class="about-content">
@@ -19,11 +31,11 @@
 
 		<div class="info-grid">
 			<div class="info-item">
-				<span class="info-label">Version</span>
+				<span class="info-label mono-label">Version</span>
 				<span class="info-value">{version}</span>
 			</div>
 			<div class="info-item">
-				<span class="info-label">License</span>
+				<span class="info-label mono-label">License</span>
 				<span class="info-value">MIT</span>
 			</div>
 		</div>
@@ -42,16 +54,15 @@
 		</div>
 
 		<div class="stack-section">
-			<h3 class="stack-title">Built with</h3>
-			<ul class="stack-list" role="list">
-				<li>Tauri v2 — Desktop framework</li>
-				<li>Svelte 5 — UI framework (runes)</li>
-				<li>Bun + Elysia — Agent daemon</li>
-				<li>CodeMirror 6 — Diff viewer</li>
-				<li>Shiki — Syntax highlighting</li>
-				<li>shadcn-svelte + bits-ui — Components</li>
-				<li>TailwindCSS v4 — Styling</li>
-			</ul>
+			<h3 class="stack-title industrial-caps">Built with</h3>
+			<div class="stack-tags" role="list">
+				{#each stack as item}
+					<div class="stack-tag-item" role="listitem">
+						<Tag variant="primary">{item.name}</Tag>
+						<span class="stack-desc">{item.desc}</span>
+					</div>
+				{/each}
+			</div>
 		</div>
 	</div>
 </div>
@@ -72,10 +83,8 @@
 	}
 
 	.about-title {
-		font-size: var(--font-size-xl);
-		font-weight: var(--font-weight-semibold);
+		font-size: var(--font-size-sm);
 		color: var(--color-text-primary);
-		letter-spacing: var(--tracking-snug);
 	}
 
 	.about-content {
@@ -140,11 +149,7 @@
 	}
 
 	.info-label {
-		font-size: var(--font-size-xs);
-		font-weight: var(--font-weight-semibold);
 		color: var(--color-text-muted);
-		text-transform: uppercase;
-		letter-spacing: var(--tracking-wider);
 	}
 
 	.info-value {
@@ -182,30 +187,24 @@
 	}
 
 	.stack-title {
-		font-size: var(--font-size-md);
-		font-weight: var(--font-weight-semibold);
+		font-size: var(--font-size-xs);
 		color: var(--color-text-secondary);
 	}
 
-	.stack-list {
-		list-style: none;
+	.stack-tags {
 		display: flex;
 		flex-direction: column;
 		gap: var(--space-2);
-		padding: 0;
 	}
 
-	.stack-list li {
-		font-size: var(--font-size-sm);
-		color: var(--color-text-muted);
+	.stack-tag-item {
 		display: flex;
 		align-items: center;
-		gap: var(--space-2);
+		gap: var(--space-3);
 	}
 
-	.stack-list li::before {
-		content: '—';
-		color: var(--color-primary);
-		font-weight: var(--font-weight-bold);
+	.stack-desc {
+		font-size: var(--font-size-sm);
+		color: var(--color-text-muted);
 	}
 </style>

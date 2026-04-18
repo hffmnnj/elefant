@@ -30,8 +30,21 @@
 	background: var(--color-text-disabled);
 }
 
-/* Selection */
+/* Selection — amber tint */
 ::selection {
-	background: var(--color-primary-subtle);
-	color: var(--color-primary);
+	background: rgba(245, 166, 35, 0.25);
+	color: var(--color-text-primary);
+}
+
+/* Button press feedback */
+button:active:not(:disabled) {
+	transform: scale(0.98);
+	transition: transform var(--duration-instant) var(--ease-linear-soft);
+}
+
+/* Respect reduced motion */
+@media (prefers-reduced-motion: reduce) {
+	button:active:not(:disabled) {
+		transform: none;
+	}
 }

@@ -34,7 +34,7 @@
 		background: transparent;
 		color: var(--color-text-secondary);
 		cursor: pointer;
-		transition: color var(--transition-fast), border-color var(--transition-fast), background-color var(--transition-fast);
+		transition: all var(--transition-base);
 	}
 
 	.theme-toggle:hover {

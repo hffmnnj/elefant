@@ -1,0 +1,96 @@
+/* =========================================
+   INDUSTRIAL TEXTURE SYSTEM
+   Noise, grain, and structural utilities
+   Inspiration: Factory AI minimalism, Nothing Phone raw honesty
+   ========================================= */
+
+/* --- Noise/Grain Overlay --- */
+/* SVG noise pattern as inline data URI — no external file needed */
+.texture-noise {
+	position: relative;
+}
+
+.texture-noise::after {
+	content: '';
+	position: absolute;
+	inset: 0;
+	pointer-events: none;
+	border-radius: inherit;
+	background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='1'/%3E%3C/svg%3E");
+	opacity: var(--texture-noise-opacity, 0.03);
+	mix-blend-mode: overlay;
+	z-index: 1;
+}
+
+/* --- Structural Dot Grid --- */
+.texture-grid {
+	background-image: radial-gradient(
+		circle,
+		var(--texture-grid-color) 1px,
+		transparent 1px
+	);
+	background-size: var(--texture-grid-size) var(--texture-grid-size);
+}
+
+/* --- Industrial Typography Utilities --- */
+
+/* Monospace label: for metadata, timestamps, code references */
+.mono-label {
+	font-family: var(--font-mono);
+	font-size: var(--font-size-xs, 11px);
+	font-weight: var(--font-weight-medium, 500);
+	letter-spacing: 0.04em;
+	color: var(--color-text-muted);
+}
+
+/* Uppercase mono label: for section headers, badges, status */
+.industrial-caps {
+	font-family: var(--font-mono);
+	font-size: var(--font-size-xs, 11px);
+	font-weight: var(--font-weight-semibold, 600);
+	text-transform: uppercase;
+	letter-spacing: 0.06em;
+	color: var(--color-text-secondary);
+}
+
+/* --- Structural Border Utilities --- */
+
+/* Hairline border: honest, structural border for interactive elements */
+.hairline-border {
+	border: 1px solid var(--color-border);
+}
+
+.hairline-border-strong {
+	border: 1px solid var(--color-border-strong);
+}
+
+/* --- Structural Dividers --- */
+
+/* Structural divider: visible section separator */
+.structural-divider {
+	height: 1px;
+	background: var(--color-border);
+	margin: var(--space-4) 0;
+}
+
+.structural-divider-strong {
+	height: 1px;
+	background: var(--color-border-strong);
+	margin: var(--space-4) 0;
+}
+
+/* Structural divider with label */
+.structural-divider-labeled {
+	display: flex;
+	align-items: center;
+	gap: var(--space-3);
+	margin: var(--space-4) 0;
+}
+
+.structural-divider-labeled::before,
+.structural-divider-labeled::after {
+	content: '';
+	flex: 1;
+	height: 1px;
+	background: var(--color-border);
+}
