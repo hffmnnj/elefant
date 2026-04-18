@@ -5,6 +5,7 @@
 	import Sidebar from "$lib/components/layout/Sidebar.svelte";
 	import ConnectionStatus from "$lib/components/ConnectionStatus.svelte";
 	import ThemeToggle from "$lib/components/ThemeToggle.svelte";
+	import ApprovalPanel from "$lib/components/ApprovalPanel.svelte";
 	import { themeStore } from "$lib/stores/theme.svelte.js";
 	import { navigationStore } from "$lib/stores/navigation.svelte.js";
 	import { connectionStore } from "$lib/stores/connection.svelte.js";
@@ -180,6 +181,9 @@
 		</div>
 	{/if}
 </AppShell>
+
+<!-- Floating tool-call approval overlay (shown when daemon requests user decision) -->
+<ApprovalPanel />
 
 <style>
 	.topbar-provider {
