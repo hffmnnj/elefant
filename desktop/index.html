@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>Elefant</title>
+		<script>
+			// Apply theme before paint to prevent flash
+			try {
+				const stored = localStorage.getItem("elefant-theme");
+				if (stored === "light" || stored === "dark") {
+					document.documentElement.setAttribute("data-theme", stored);
+				}
+			} catch (e) {}
+		</script>
+	</head>
+	<body>
+		<div id="app"></div>
+		<script type="module" src="/src/main.ts"></script>
+	</body>
+</html>

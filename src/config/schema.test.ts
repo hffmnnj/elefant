@@ -98,32 +98,32 @@ describe("configSchema", () => {
 		expect(result.success).toBe(true);
 	});
 
-	it("fails when providers array is missing", () => {
-		const invalidConfig = {
+	it("succeeds when providers array is missing (defaults to empty)", () => {
+		const config = {
 			port: 8080,
 			defaultProvider: "openai",
 			logLevel: "info" as const,
 		};
 
-		const result = configSchema.safeParse(invalidConfig);
-		expect(result.success).toBe(false);
-		if (!result.success) {
-			expect(result.error.issues[0].path).toContain("providers");
+		const result = configSchema.safeParse(config);
+		expect(result.success).toBe(true);
+		if (result.success) {
+			expect(result.data.providers).toEqual([]);
 		}
 	});
 
-	it("fails when providers array is empty", () => {
-		const invalidConfig = {
+	it("succeeds when providers array is empty (zero-provider startup allowed)", () => {
+		const config = {
 			port: 8080,
 			providers: [],
 			defaultProvider: "openai",
 			logLevel: "info" as const,
 		};
 
-		const result = configSchema.safeParse(invalidConfig);
-		expect(result.success).toBe(false);
-		if (!result.success) {
-			expect(result.error.issues[0].path).toContain("providers");
+		const result = configSchema.safeParse(config);
+		expect(result.success).toBe(true);
+		if (result.success) {
+			expect(result.data.providers).toEqual([]);
 		}
 	});
 
@@ -192,7 +192,7 @@ describe("configSchema", () => {
 		}
 	});
 
-	it("fails when defaultProvider is empty", () => {
+	it("succeeds when defaultProvider is empty (set after providers added via API)", () => {
 		const invalidConfig = {
 			port: 8080,
 			providers: [
@@ -209,9 +209,6 @@ describe("configSchema", () => {
 		};
 
 		const result = configSchema.safeParse(invalidConfig);
-		expect(result.success).toBe(false);
-		if (!result.success) {
-			expect(result.error.issues[0].path).toContain("defaultProvider");
-		}
+		expect(result.success).toBe(true);
 	});
 });

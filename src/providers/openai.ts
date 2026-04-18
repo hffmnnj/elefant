@@ -82,17 +82,32 @@ function toOpenAIMessages(messages: Message[]): Array<Record<string, unknown>> {
 }
 
 function toOpenAITools(tools: ToolDefinition[]): Array<Record<string, unknown>> {
-	return tools.map((tool) => ({
-		type: 'function',
-		function: {
-			name: tool.name,
-			description: tool.description,
-			parameters: {
-				type: 'object',
-				properties: tool.parameters,
+	return tools.map((tool) => {
+		const properties: Record<string, unknown> = {}
+		const required: string[] = []
+
+		for (const [key, value] of Object.entries(tool.parameters as unknown as Record<string, Record<string, unknown>>)) {
+			// Strip non-standard fields (required, default) from property schema
+			const { required: isRequired, default: _default, ...rest } = value
+			properties[key] = rest
+			if (isRequired === true) {
+				required.push(key)
+			}
+		}
+
+		return {
+			type: 'function',
+			function: {
+				name: tool.name,
+				description: tool.description,
+				parameters: {
+					type: 'object',
+					properties,
+					...(required.length > 0 ? { required } : {}),
+				},
 			},
-		},
-	}))
+		}
+	})
 }
 
 function parseToolArguments(rawArguments: string): Record<string, unknown> {
@@ -141,11 +156,16 @@ export class OpenAIAdapter implements ProviderAdapter {
 		}
 
 		const endpoint = buildOpenAIEndpoint(this.config.baseURL)
+		const openAITools = toOpenAITools(tools)
 		const requestBody: Record<string, unknown> = {
 			model: this.config.model,
 			messages: toOpenAIMessages(messages),
-			tools: toOpenAITools(tools),
 			stream: true,
+		}
+
+		// Only include tools if there are any — many providers reject empty arrays
+		if (openAITools.length > 0) {
+			requestBody.tools = openAITools
 		}
 
 		if (typeof options?.temperature === 'number') {
@@ -174,7 +194,12 @@ export class OpenAIAdapter implements ProviderAdapter {
 
 		if (!response.ok) {
 			const responseBody = await response.text().catch(() => '')
-			yield createErrorEvent(`OpenAI request failed with status ${response.status}`, {
+			let detail = `status ${response.status}`
+			try {
+				const parsed = JSON.parse(responseBody) as { error?: { message?: string } }
+				if (parsed?.error?.message) detail += `: ${parsed.error.message}`
+			} catch { /* use raw body */ }
+			yield createErrorEvent(`OpenAI request failed with ${detail}`, {
 				status: response.status,
 				body: responseBody,
 			})

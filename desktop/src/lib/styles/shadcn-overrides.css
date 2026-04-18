@@ -1,0 +1,37 @@
+/* =========================================
+   shadcn-svelte TOKEN OVERRIDES
+   Maps shadcn's variable names to our token system.
+   These are already mapped in tokens.css, but this file
+   handles component-specific overrides and global polish.
+   ========================================= */
+
+/* Input focus ring uses primary */
+:focus-visible {
+	outline: 2px solid var(--color-primary);
+	outline-offset: 2px;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+	width: 6px;
+	height: 6px;
+}
+
+::-webkit-scrollbar-track {
+	background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+	background: var(--color-border-strong);
+	border-radius: var(--radius-full);
+}
+
+::-webkit-scrollbar-thumb:hover {
+	background: var(--color-text-disabled);
+}
+
+/* Selection */
+::selection {
+	background: var(--color-primary-subtle);
+	color: var(--color-primary);
+}

@@ -57,4 +57,15 @@ describe('createApp', () => {
 		expect(payload.ok).toBe(false)
 		expect(typeof payload.error).toBe('string')
 	})
+
+	it('should allow tauri://localhost origin', async () => {
+		const hooks = new HookRegistry()
+		const app = createApp(createTestRouter(), createToolRegistry(hooks), hooks)
+		const response = await app.handle(
+			new Request('http://localhost/health', {
+				headers: { origin: 'tauri://localhost' },
+			})
+		)
+		expect(response.headers.get('access-control-allow-origin')).toBe('tauri://localhost')
+	})
 })

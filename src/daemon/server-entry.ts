@@ -5,32 +5,24 @@ import { gracefulShutdown } from './shutdown.ts'
 
 const configResult = await loadConfig()
 if (!configResult.ok) {
-	console.error('Config error:', configResult.error.message)
+	console.error('[elefant] Config error:', configResult.error.message)
 	process.exit(1)
 }
 
 const daemonResult = await createDaemon(configResult.data)
 if (!daemonResult.ok) {
-	console.error('Daemon error:', daemonResult.error.message)
+	console.error('[elefant] Daemon error:', daemonResult.error.message)
 	process.exit(1)
 }
 
-const pidWriteResult = await writePid(process.pid)
-if (!pidWriteResult.ok) {
-	console.error('PID error:', pidWriteResult.error.message)
+const pidResult = await writePid(process.pid)
+if (!pidResult.ok) {
+	console.error('[elefant] PID error:', pidResult.error.message)
 	process.exit(1)
 }
+
+process.on('exit', () => { void removePid() })
+process.on('SIGTERM', () => { void gracefulShutdown('SIGTERM', daemonResult.data) })
+process.on('SIGINT', () => { void gracefulShutdown('SIGINT', daemonResult.data) })
 
 await daemonResult.data.start()
-
-process.on('SIGTERM', () => {
-	void gracefulShutdown('SIGTERM', daemonResult.data)
-})
-
-process.on('SIGINT', () => {
-	void gracefulShutdown('SIGINT', daemonResult.data)
-})
-
-process.on('exit', () => {
-	void removePid()
-})

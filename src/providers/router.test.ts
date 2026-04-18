@@ -50,14 +50,29 @@ describe('ProviderRouter', () => {
 		}
 	})
 
-	it('returns typed error for unknown provider names', () => {
+	it('falls back to first provider for unknown provider names', () => {
+		// Router falls back to first available adapter rather than erroring —
+		// ensures chat still works even when defaultProvider is stale after a rename
 		const router = new ProviderRouter(TEST_CONFIG)
 		const result = router.getAdapter('does-not-exist')
+
+		expect(result.ok).toBe(true)
+	})
+
+	it('returns error when no providers configured and name requested', () => {
+		const emptyConfig = {
+			port: 1337,
+			providers: [],
+			defaultProvider: '',
+			logLevel: 'info' as const,
+		}
+		const router = new ProviderRouter(emptyConfig)
+		const result = router.getAdapter('any-provider')
 
 		expect(result.ok).toBe(false)
 		if (!result.ok) {
 			expect(result.error.code).toBe('CONFIG_INVALID')
-			expect(result.error.message).toContain('Provider not configured')
+			expect(result.error.message).toContain('No providers configured')
 		}
 	})
 })

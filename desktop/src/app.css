@@ -1,0 +1,16 @@
+@import "tailwindcss";
+
+/* Fonts */
+@import "@fontsource/geist-sans/400.css";
+@import "@fontsource/geist-sans/500.css";
+@import "@fontsource/geist-sans/600.css";
+@import "@fontsource/geist-sans/700.css";
+@import "@fontsource/geist-mono/400.css";
+@import "@fontsource/geist-mono/500.css";
+@import "@fontsource/geist-mono/600.css";
+@import "@fontsource/geist-mono/700.css";
+
+/* Design system */
+@import "./lib/styles/tokens.css";
+@import "./lib/styles/typography.css";
+@import "./lib/styles/shadcn-overrides.css";

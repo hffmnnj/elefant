@@ -8,7 +8,7 @@ import { OpenAIAdapter } from './openai.ts'
 
 export class ProviderRouter {
 	private readonly adapters: Map<string, ProviderAdapter>
-	private readonly defaultProvider: string
+	private defaultProvider: string
 
 	constructor(config: ElefantConfig) {
 		this.adapters = new Map<string, ProviderAdapter>()
@@ -32,19 +32,38 @@ export class ProviderRouter {
 			throw new Error(`Unsupported provider format: ${provider.format}`)
 		}
 
-		if (!this.adapters.has(this.defaultProvider)) {
-			throw new Error(`Default provider not found: ${this.defaultProvider}`)
+		// No providers configured yet — that's fine, user will add via the desktop UI
+	}
+
+	public reload(config: ElefantConfig): void {
+		this.adapters.clear()
+		for (const provider of config.providers) {
+			if (provider.format === 'openai') {
+				this.adapters.set(provider.name, new OpenAIAdapter(provider))
+			} else if (provider.format === 'anthropic') {
+				this.adapters.set(provider.name, new AnthropicAdapter(provider))
+			}
 		}
+		this.defaultProvider = config.defaultProvider
 	}
 
 	public getAdapter(name?: string): Result<ProviderAdapter, ElefantError> {
+		if (this.adapters.size === 0) {
+			return err({
+				code: 'CONFIG_INVALID',
+				message: 'No providers configured. Add a provider in Settings.',
+				details: { availableProviders: [] },
+			})
+		}
+
 		const selectedProvider = name ?? this.defaultProvider
 		const adapter = this.adapters.get(selectedProvider)
+			?? this.adapters.values().next().value // fallback to first if default unset
 
 		if (!adapter) {
 			return err({
 				code: 'CONFIG_INVALID',
-				message: `Provider not configured: ${selectedProvider}`,
+				message: `Provider not found: "${selectedProvider}". Available: ${this.listProviders().join(', ')}`,
 				details: {
 					requestedProvider: selectedProvider,
 					availableProviders: this.listProviders(),
