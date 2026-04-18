@@ -2,11 +2,16 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { Elysia } from 'elysia';
 
 import { Database } from '../db/database.ts';
-import { getProjectByPath } from '../db/repo/projects.ts';
+import { getProjectByPath, getProjectById, insertProject } from '../db/repo/projects.ts';
 import { ProjectManager } from '../project/manager.ts';
 import type { ProjectInfo } from '../project/types.ts';
 import { ok } from '../types/result.ts';
-import { mountProjectsCreateRoute, mountProjectsSessionsRoutes } from './routes-projects.ts';
+import {
+  mountProjectsCreateRoute,
+  mountProjectsSessionsRoutes,
+  mountProjectsUpdateRoute,
+  mountProjectsDeleteRoute,
+} from './routes-projects.ts';
 
 const originalBootstrap = ProjectManager.bootstrap;
 
