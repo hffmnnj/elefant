@@ -13,4 +13,6 @@
 /* Design system */
 @import "./lib/styles/tokens.css";
 @import "./lib/styles/typography.css";
+@import "./lib/styles/glass.css";
+@import "./lib/styles/texture.css";
 @import "./lib/styles/shadcn-overrides.css";
