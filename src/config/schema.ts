@@ -10,8 +10,8 @@ const providerSchema = z.object({
 
 const configSchema = z.object({
 	port: z.number().int().min(1).max(65535).default(1337),
-	providers: z.array(providerSchema).min(1),
-	defaultProvider: z.string().min(1),
+	providers: z.array(providerSchema).default([]),
+	defaultProvider: z.string().default(''),
 	logLevel: z.enum(["debug", "info", "warn", "error"]).default("info"),
 });
 

@@ -1,142 +1,88 @@
-import { mkdir, readTextFile, writeTextFile, exists } from '@tauri-apps/plugin-fs';
-import { homeDir, join } from '@tauri-apps/api/path';
+/**
+ * Config service — all config reads/writes go through the daemon HTTP API.
+ * The desktop never touches the filesystem directly.
+ */
+
 import type { ElefantConfig, ProviderEntry } from '$lib/daemon/types.js';
+import { getDaemonClient } from '$lib/daemon/client.js';
 
-const CONFIG_DIR = '.config/elefant';
-const CONFIG_FILE = 'elefant.config.json';
+function baseUrl(): string {
+	return getDaemonClient().getBaseUrl();
+}
 
-const DEFAULT_CONFIG: ElefantConfig = {
-	port: 1337,
-	providers: [],
-	defaultProvider: '',
-	logLevel: 'info',
+async function apiFetch(path: string, init?: RequestInit): Promise<Response> {
+	const res = await fetch(`${baseUrl()}${path}`, {
+		...init,
+		headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) },
+	});
+	return res;
+}
+
+export type MaskedConfig = Omit<ElefantConfig, 'providers'> & {
+	providers: Array<Omit<ProviderEntry, 'apiKey'> & { apiKey: string }>;
 };
 
-async function getConfigPath(): Promise<string> {
-	const home = await homeDir();
-	return await join(home, CONFIG_DIR, CONFIG_FILE);
-}
-
-async function ensureConfigDir(): Promise<void> {
-	const home = await homeDir();
-	const configDir = await join(home, CONFIG_DIR);
-	const dirExists = await exists(configDir);
-	if (!dirExists) {
-		await mkdir(configDir, { recursive: true });
-	}
-}
-
-export async function readConfig(): Promise<ElefantConfig | null> {
+export async function readConfig(): Promise<MaskedConfig | null> {
 	try {
-		const configPath = await getConfigPath();
-		const fileExists = await exists(configPath);
-
-		if (!fileExists) {
-			return null;
-		}
-
-		const content = await readTextFile(configPath);
-		const parsed = JSON.parse(content) as ElefantConfig;
-		return parsed;
-	} catch (error) {
-		console.error('Failed to read config:', error);
+		const res = await apiFetch('/api/config');
+		if (res.status === 404) return null;
+		if (!res.ok) throw new Error(`HTTP ${res.status}`);
+		const body = await res.json() as { ok: boolean; config: MaskedConfig };
+		return body.config;
+	} catch {
 		return null;
 	}
 }
 
-export async function writeConfig(config: ElefantConfig): Promise<void> {
-	try {
-		await ensureConfigDir();
-	} catch (e) {
-		const msg = e instanceof Error ? e.message : String(e);
-		throw new Error(`Could not create config directory (~/.config/elefant/): ${msg}`);
+export async function updateConfig(
+	patch: Partial<Pick<ElefantConfig, 'port' | 'defaultProvider' | 'logLevel'>>,
+): Promise<void> {
+	const res = await apiFetch('/api/config', {
+		method: 'PUT',
+		body: JSON.stringify(patch),
+	});
+	if (!res.ok) {
+		const body = await res.json().catch(() => ({})) as { error?: string };
+		throw new Error(body.error ?? `HTTP ${res.status}`);
 	}
-	const configPath = await getConfigPath();
-	const content = JSON.stringify(config, null, 2);
-	try {
-		await writeTextFile(configPath, content);
-	} catch (e) {
-		const msg = e instanceof Error ? e.message : String(e);
-		throw new Error(`Could not write config file (${configPath}): ${msg}`);
-	}
-}
-
-export async function getOrCreateConfig(): Promise<ElefantConfig> {
-	const existing = await readConfig();
-	if (existing) return existing;
-
-	await writeConfig(DEFAULT_CONFIG);
-	return { ...DEFAULT_CONFIG };
 }
 
 export async function addProvider(provider: ProviderEntry): Promise<void> {
-	const config = await getOrCreateConfig();
-
-	if (config.providers.some(p => p.name === provider.name)) {
-		throw new Error(`Provider with name "${provider.name}" already exists`);
+	const res = await apiFetch('/api/providers', {
+		method: 'POST',
+		body: JSON.stringify(provider),
+	});
+	if (!res.ok) {
+		const body = await res.json().catch(() => ({})) as { error?: string };
+		throw new Error(body.error ?? `HTTP ${res.status}`);
 	}
-
-	config.providers.push(provider);
-	if (!config.defaultProvider) {
-		config.defaultProvider = provider.name;
-	}
-
-	await writeConfig(config);
 }
 
-export async function updateProvider(name: string, updated: ProviderEntry): Promise<void> {
-	const config = await getOrCreateConfig();
-	const index = config.providers.findIndex(p => p.name === name);
-
-	if (index === -1) {
-		throw new Error(`Provider "${name}" not found`);
+export async function updateProvider(name: string, provider: ProviderEntry): Promise<void> {
+	const res = await apiFetch(`/api/providers/${encodeURIComponent(name)}`, {
+		method: 'PUT',
+		body: JSON.stringify(provider),
+	});
+	if (!res.ok) {
+		const body = await res.json().catch(() => ({})) as { error?: string };
+		throw new Error(body.error ?? `HTTP ${res.status}`);
 	}
-
-	if (name !== updated.name && config.defaultProvider === name) {
-		config.defaultProvider = updated.name;
-	}
-
-	config.providers[index] = updated;
-	await writeConfig(config);
 }
 
 export async function deleteProvider(name: string): Promise<void> {
-	const config = await getOrCreateConfig();
-	config.providers = config.providers.filter(p => p.name !== name);
-
-	if (config.defaultProvider === name) {
-		config.defaultProvider = config.providers[0]?.name ?? '';
+	const res = await apiFetch(`/api/providers/${encodeURIComponent(name)}`, {
+		method: 'DELETE',
+	});
+	if (!res.ok) {
+		const body = await res.json().catch(() => ({})) as { error?: string };
+		throw new Error(body.error ?? `HTTP ${res.status}`);
 	}
-
-	await writeConfig(config);
-}
-
-export async function setDefaultProvider(name: string): Promise<void> {
-	const config = await getOrCreateConfig();
-	config.defaultProvider = name;
-	await writeConfig(config);
-}
-
-export async function setLogLevel(level: ElefantConfig['logLevel']): Promise<void> {
-	const config = await getOrCreateConfig();
-	config.logLevel = level;
-	await writeConfig(config);
-}
-
-export async function setPort(port: number): Promise<void> {
-	const config = await getOrCreateConfig();
-	config.port = port;
-	await writeConfig(config);
 }
 
 export const configService = {
 	readConfig,
-	writeConfig,
-	getOrCreateConfig,
+	updateConfig,
 	addProvider,
 	updateProvider,
 	deleteProvider,
-	setDefaultProvider,
-	setLogLevel,
-	setPort,
 };
