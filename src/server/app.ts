@@ -12,6 +12,7 @@ import { mountWsRoute } from './routes-ws.ts'
 import { mountProjectEventsRoute, mountProjectsRoutes } from './routes-projects.ts'
 import { RunRegistry } from '../runs/registry.ts'
 import { mountAgentRunRoutes } from '../runs/routes.ts'
+import { mountWorktreeRoutes } from '../worktree/routes.ts'
 
 export function createApp(
 	providerRouter: ProviderRouter,
@@ -103,6 +104,9 @@ export function createApp(
 		runRegistry,
 		sseManager: sse,
 	})
+
+	// Mount worktree management routes
+	mountWorktreeRoutes(baseApp, { db })
 
 	return baseApp
 }
