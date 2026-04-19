@@ -7,6 +7,7 @@
 	// (done/error/cancelled) render a status banner at the tail.
 
 	import { agentRunsStore } from '$lib/stores/agent-runs.svelte.js';
+	import { navigationStore } from '$lib/stores/navigation.svelte.js';
 	import type {
 		AgentRun,
 		AgentRunStatus,
@@ -49,14 +50,10 @@
 	/**
 	 * Open a child run spawned via the `task` tool.
 	 *
-	 * Stubbed for now — wave 6 wires this through `navigationStore` so
-	 * clicks push a child-run view onto the nav stack. Keeping the
-	 * signature stable here so the inline AgentTaskCard never needs to
-	 * change when navigation lands.
+	 * Wired through navigationStore to push a child-run view onto the nav stack.
 	 */
 	function openChildRun(childRunId: string): void {
-		// eslint-disable-next-line no-console
-		console.log('navigate to child run:', childRunId);
+		navigationStore.openChildRun(childRunId);
 	}
 
 	function terminalHeading(status: AgentRunStatus): string {
