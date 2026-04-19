@@ -75,3 +75,11 @@ export interface AgentRunStatusChangedData {
 	nextStatus: AgentRunStatus
 	reason?: string
 }
+
+export type AgentRunToolCallMetadataData = {
+	toolCallId: string
+	runId: string
+	parentRunId?: string
+	agentType: string
+	title: string
+}

@@ -271,6 +271,42 @@ describe('createTaskTool', () => {
 		database.close()
 	})
 
+	it('publishes agent_run.tool_call_metadata when tool call context is provided', async () => {
+		const { deps, publishedEvents, database } = buildDeps()
+		const tool = createTaskTool(deps)
+
+		const result = await tool.execute({
+			description: 'metadata test',
+			prompt: 'do something',
+			agent_type: 'researcher',
+			_toolCallId: 'tool-call-123',
+		} as unknown as Parameters<typeof tool.execute>[0])
+
+		expect(result.ok).toBe(true)
+		if (!result.ok) return
+
+		const payload = JSON.parse(result.data) as { runId: string }
+		const metadataEvent = publishedEvents.find((event) => event.type === 'agent_run.tool_call_metadata')
+		expect(metadataEvent).toBeDefined()
+
+		const metadata = metadataEvent?.data as {
+			data: {
+				toolCallId: string
+				runId: string
+				parentRunId: string
+				agentType: string
+				title: string
+			}
+		}
+
+		expect(metadata.data.toolCallId).toBe('tool-call-123')
+		expect(metadata.data.runId).toBe(payload.runId)
+		expect(metadata.data.parentRunId).toBe('parent-run-id')
+		expect(metadata.data.agentType).toBe('researcher')
+		expect(metadata.data.title).toBe('metadata test')
+		database.close()
+	})
+
 	it('returns correct JSON payload with spawned status', async () => {
 		const { deps, database } = buildDeps()
 		const tool = createTaskTool(deps)

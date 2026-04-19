@@ -6,6 +6,7 @@ import {
 	getPendingStatusChangeCount,
 	publishRunEvent,
 	publishStatusChange,
+	publishToolCallMetadata,
 } from './events.ts'
 import type { AgentRunStatusChangedData, RunContext } from './types.ts'
 
@@ -39,6 +40,7 @@ describe('publishRunEvent', () => {
 			'agent_run.spawned',
 			'agent_run.token',
 			'agent_run.tool_call',
+			'agent_run.tool_call_metadata',
 			'agent_run.tool_result',
 			'agent_run.question',
 			'agent_run.done',
@@ -76,6 +78,55 @@ describe('publishRunEvent', () => {
 		}
 
 		clearRunEventSequence(runContext.runId)
+	})
+})
+
+describe('publishToolCallMetadata', () => {
+	it('publishes correlated metadata event when session context exists', () => {
+		const captured: Array<{
+			projectId: string
+			sessionId: string
+			eventType: string
+			data: unknown
+		}> = []
+
+		const sseManager = {
+			publish: (projectId: string, sessionId: string, eventType: string, data: unknown) => {
+				captured.push({ projectId, sessionId, eventType, data })
+			},
+		}
+
+		publishToolCallMetadata(sseManager, 'project-1', {
+			toolCallId: 'call-1',
+			runId: 'child-run-1',
+			parentRunId: 'parent-run-1',
+			agentType: 'executor',
+			title: 'Delegate task',
+			__sessionId: 'session-1',
+		} as unknown as Parameters<typeof publishToolCallMetadata>[2])
+
+		expect(captured.length).toBe(1)
+		expect(captured[0]?.projectId).toBe('project-1')
+		expect(captured[0]?.sessionId).toBe('session-1')
+		expect(captured[0]?.eventType).toBe('agent_run.tool_call_metadata')
+
+		const envelope = captured[0]?.data as {
+			type: string
+			data: {
+				toolCallId: string
+				runId: string
+				parentRunId: string
+				agentType: string
+				title: string
+			}
+		}
+
+		expect(envelope.type).toBe('agent_run.tool_call_metadata')
+		expect(envelope.data.toolCallId).toBe('call-1')
+		expect(envelope.data.runId).toBe('child-run-1')
+		expect(envelope.data.parentRunId).toBe('parent-run-1')
+		expect(envelope.data.agentType).toBe('executor')
+		expect(envelope.data.title).toBe('Delegate task')
 	})
 })
 

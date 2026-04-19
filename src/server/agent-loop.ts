@@ -58,6 +58,7 @@ function cloneMessages(messages: Message[]): Message[] {
 function toToolArguments(
 	args: unknown,
 	runId: string,
+	toolCallId: string,
 	questionEmitter: QuestionEmitter,
 ): Record<string, unknown> {
 	const baseArgs =
@@ -68,6 +69,7 @@ function toToolArguments(
 	return {
 		...baseArgs,
 		conversationId: runId,
+		_toolCallId: toolCallId,
 		_questionEmitter: questionEmitter,
 	}
 }
@@ -325,7 +327,7 @@ export async function* runAgentLoop(
 
 			const executeResult = await registry.execute(
 				toolCall.name,
-				toToolArguments(toolCall.arguments, options.runContext.runId, runQuestionEmitter),
+				toToolArguments(toolCall.arguments, options.runContext.runId, toolCall.id, runQuestionEmitter),
 			)
 			const toolResult = createToolResult(
 				toolCall.id,

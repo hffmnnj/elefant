@@ -4,7 +4,7 @@ import type { HookRegistry } from '../../hooks/index.js'
 import type { ProviderRouter } from '../../providers/router.js'
 import { buildInitialMessages } from '../../runs/context.js'
 import { createRun, markRunEnded } from '../../runs/dal.js'
-import { publishRunEvent, publishStatusChange } from '../../runs/events.js'
+import { publishRunEvent, publishStatusChange, publishToolCallMetadata } from '../../runs/events.js'
 import type { RunRegistry } from '../../runs/registry.js'
 import type { RunContext } from '../../runs/types.js'
 import { runAgentLoop } from '../../server/agent-loop.js'
@@ -32,6 +32,10 @@ export interface TaskParams {
 	prompt: string
 	agent_type: string
 	context_mode?: 'none' | 'inherit_session' | 'snapshot'
+}
+
+interface TaskExecutionParams extends TaskParams {
+	_toolCallId?: string
 }
 
 export const DEFAULT_MAX_CHILDREN = 4
@@ -74,7 +78,8 @@ Depth and concurrency limits are enforced by agent configuration.`,
 					'Context inheritance: "none" (prompt only), "snapshot" (frozen session history), "inherit_session" (live session history)',
 			},
 		},
-		execute: async (params: TaskParams): Promise<Result<string, ElefantError>> => {
+		execute: async (rawParams: TaskParams): Promise<Result<string, ElefantError>> => {
+			const params = rawParams as TaskExecutionParams
 			const {
 				database,
 				runRegistry,
@@ -220,6 +225,17 @@ Depth and concurrency limits are enforced by agent configuration.`,
 				contextMode,
 				parentRunId: currentRun.runId,
 			})
+
+			if (typeof params._toolCallId === 'string' && params._toolCallId.length > 0) {
+				publishToolCallMetadata(sseManager, currentRun.projectId, {
+					toolCallId: params._toolCallId,
+					runId: childRunId,
+					parentRunId: currentRun.runId,
+					agentType: params.agent_type,
+					title: params.description,
+					__sessionId: currentRun.sessionId,
+				} as unknown as Parameters<typeof publishToolCallMetadata>[2])
+			}
 
 			void (async () => {
 				let endStatus: 'done' | 'error' = 'done'

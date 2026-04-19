@@ -1,4 +1,10 @@
-import type { RunContext, AgentRunEventEnvelope, AgentRunStatusChangedData, AgentRunStatus } from './types.ts'
+import type {
+	RunContext,
+	AgentRunEventEnvelope,
+	AgentRunStatusChangedData,
+	AgentRunStatus,
+	AgentRunToolCallMetadataData,
+} from './types.ts'
 
 interface SsePublisher {
 	publish(projectId: string, sessionId: string, eventType: string, data: unknown): void
@@ -149,4 +155,42 @@ export function publishRunEvent(
 
 export function clearRunEventSequence(runId: string): void {
 	runEventSequences.delete(runId)
+}
+
+export function publishToolCallMetadata(
+	sseManager: SsePublisher,
+	projectId: string,
+	data: AgentRunToolCallMetadataData,
+): void {
+	const sessionId = (
+		data as AgentRunToolCallMetadataData & {
+			__sessionId?: string
+		}
+	).__sessionId
+
+	if (!sessionId) {
+		return
+	}
+
+	publishRunEvent(
+		{
+			runId: data.runId,
+			parentRunId: data.parentRunId,
+			depth: 0,
+			agentType: data.agentType,
+			title: data.title,
+			sessionId,
+			projectId,
+			signal: new AbortController().signal,
+		},
+		sseManager,
+		'agent_run.tool_call_metadata',
+		{
+			toolCallId: data.toolCallId,
+			runId: data.runId,
+			parentRunId: data.parentRunId,
+			agentType: data.agentType,
+			title: data.title,
+		},
+	)
 }
