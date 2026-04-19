@@ -358,19 +358,27 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		font-weight: var(--font-weight-bold);
+		font-weight: var(--font-weight-normal);
 		font-size: var(--font-size-lg);
+		font-family: var(--font-serif);
+		font-style: italic;
 		flex-shrink: 0;
-		font-family: var(--font-mono);
-		box-shadow: var(--glow-primary);
-		transition: box-shadow var(--transition-fast);
+		box-shadow: var(--glow-primary), var(--shadow-sm);
+		transition: box-shadow var(--transition-fast), transform var(--transition-fast);
+	}
+
+	.brand-mark:hover {
+		box-shadow: var(--glow-primary-strong), var(--shadow-md);
+		transform: scale(1.04);
 	}
 
 	.brand-name {
-		font-weight: var(--font-weight-semibold);
-		font-size: var(--font-size-md);
+		font-family: var(--font-serif);
+		font-style: italic;
+		font-weight: var(--font-weight-normal);
+		font-size: var(--font-size-lg);
 		color: var(--color-text-primary);
-		letter-spacing: var(--tracking-tight);
+		letter-spacing: -0.01em;
 		white-space: nowrap;
 		overflow: hidden;
 	}
@@ -477,7 +485,8 @@
 		transition:
 			color var(--transition-fast),
 			background-color var(--transition-fast),
-			box-shadow var(--transition-fast);
+			box-shadow var(--transition-fast),
+			transform var(--duration-fast) var(--ease-spring);
 		white-space: nowrap;
 		overflow: hidden;
 		position: relative;
@@ -486,12 +495,14 @@
 	.nav-item:hover {
 		color: var(--color-text-primary);
 		background-color: var(--color-surface-hover);
+		transform: translateX(2px);
 	}
 
 	.nav-item.active {
 		color: var(--color-primary);
 		background-color: var(--color-primary-subtle);
 		box-shadow: inset 2px 0 0 var(--color-primary), var(--glow-primary);
+		transform: translateX(2px);
 	}
 
 	.nav-item:focus-visible {
@@ -518,6 +529,15 @@
 	.sidebar-nav.collapsed .nav-item {
 		justify-content: center;
 		padding: var(--space-2);
+		transform: none;
+	}
+
+	.sidebar-nav.collapsed .nav-item:hover {
+		transform: none;
+	}
+
+	.sidebar-nav.collapsed .nav-item.active {
+		transform: none;
 	}
 
 	.sidebar-nav.collapsed .sidebar-brand {

@@ -56,8 +56,9 @@
 		width: 60%;
 		height: 140%;
 		background: radial-gradient(
-			ellipse at center,
-			rgba(245, 166, 35, 0.06) 0%,
+			ellipse at 25% 50%,
+			rgba(64, 73, 225, 0.09) 0%,
+			rgba(64, 73, 225, 0.03) 40%,
 			transparent 70%
 		);
 		pointer-events: none;
@@ -78,6 +79,7 @@
 		position: relative;
 		z-index: var(--z-sticky);
 		transition: width var(--transition-spring);
+		border-right: 1px solid var(--glass-border);
 	}
 
 	.main-area {

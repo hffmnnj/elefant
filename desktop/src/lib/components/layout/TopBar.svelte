@@ -64,9 +64,9 @@
 		color: var(--color-text-secondary);
 		cursor: pointer;
 		transition:
-			color var(--transition-fast),
-			background-color var(--transition-fast),
-			box-shadow var(--transition-fast);
+			color var(--duration-fast) var(--ease-out-expo),
+			background-color var(--duration-fast) var(--ease-out-expo),
+			box-shadow var(--duration-fast) var(--ease-out-expo);
 	}
 
 	.sidebar-toggle:hover {
@@ -93,10 +93,10 @@
 		cursor: pointer;
 		white-space: nowrap;
 		transition:
-			color var(--transition-fast),
-			border-color var(--transition-fast),
-			background-color var(--transition-fast),
-			box-shadow var(--transition-fast);
+			color var(--duration-fast) var(--ease-out-expo),
+			border-color var(--duration-fast) var(--ease-out-expo),
+			background-color var(--duration-fast) var(--ease-out-expo),
+			box-shadow var(--duration-fast) var(--ease-out-expo);
 	}
 
 	.project-pill-name {
