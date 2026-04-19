@@ -1,20 +1,19 @@
 /* =========================================
    shadcn-svelte TOKEN OVERRIDES
    Maps shadcn's variable names to our token system.
-   These are already mapped in tokens.css, but this file
-   handles component-specific overrides and global polish.
+   Handles component-specific overrides and global polish.
    ========================================= */
 
-/* Input focus ring uses primary */
+/* Focus ring — indigo primary, accessible */
 :focus-visible {
 	outline: 2px solid var(--color-primary);
 	outline-offset: 2px;
 }
 
-/* Scrollbar styling */
+/* Scrollbar styling — ultra-minimal, barely-there */
 ::-webkit-scrollbar {
-	width: 6px;
-	height: 6px;
+	width: 4px;
+	height: 4px;
 }
 
 ::-webkit-scrollbar-track {
@@ -24,22 +23,25 @@
 ::-webkit-scrollbar-thumb {
 	background: var(--color-border-strong);
 	border-radius: var(--radius-full);
+	opacity: 0.6;
 }
 
 ::-webkit-scrollbar-thumb:hover {
 	background: var(--color-text-disabled);
 }
 
-/* Selection — amber tint */
+/* Selection — indigo tint */
 ::selection {
-	background: rgba(245, 166, 35, 0.25);
+	background: rgba(64, 73, 225, 0.22);
 	color: var(--color-text-primary);
 }
 
-/* Button press feedback */
+/* Button press feedback — physical click simulation */
 button:active:not(:disabled) {
 	transform: scale(0.98);
-	transition: transform var(--duration-instant) var(--ease-linear-soft);
+	transition:
+		transform var(--duration-micro) var(--ease-out-expo),
+		box-shadow var(--duration-micro) var(--ease-out-expo);
 }
 
 /* Respect reduced motion */
@@ -47,4 +49,9 @@ button:active:not(:disabled) {
 	button:active:not(:disabled) {
 		transform: none;
 	}
+}
+
+/* Smooth scrolling for anchor links */
+html {
+	scroll-behavior: smooth;
 }
