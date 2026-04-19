@@ -14,6 +14,7 @@ import { mountProjectEventsRoute, mountProjectsRoutes } from './routes-projects.
 import { RunRegistry } from '../runs/registry.ts'
 import { mountAgentRunRoutes } from '../runs/routes.ts'
 import { mountWorktreeRoutes } from '../worktree/routes.ts'
+import { createConfigRoutes } from './config-routes.ts'
 
 export function createApp(
 	providerRouter: ProviderRouter,
@@ -79,18 +80,16 @@ export function createApp(
 	// Register question tool route for HITL interactions
 	registerQuestionRoute(app as unknown as Elysia)
 
-	const runRegistry = new RunRegistry()
-	const configManager = new ConfigManager()
-
-	// Mount the config CRUD routes (agent profiles, providers, resolved
-	// config). This also instantiates the legacy singleton config manager
-	// used by a couple of tests, but the per-run configManager below is
-	// the one threaded into agent-run spawns.
 	const baseApp = registerServerRoutes(
 		app as unknown as Elysia,
 		providerRouter,
+		toolRegistry,
+		hookRegistry,
 		db,
 	)
+
+	const runRegistry = new RunRegistry()
+	const configManager = new ConfigManager()
 
 	// Mount transport routes when available
 	if (ws) mountWsRoute(baseApp, ws)
@@ -99,7 +98,7 @@ export function createApp(
 	// Mount project CRUD routes
 	mountProjectsRoutes(baseApp, db)
 
-	// Mount agent run routes — the sole chat delivery surface
+	// Mount agent run routes (MH3)
 	mountAgentRunRoutes(baseApp, {
 		db,
 		providerRouter,
@@ -107,11 +106,13 @@ export function createApp(
 		hookRegistry,
 		runRegistry,
 		sseManager: sse,
-		configManager,
 	})
 
-	// Mount worktree management routes
+	// Mount worktree management routes (MH5)
 	mountWorktreeRoutes(baseApp, { db })
+
+	// Mount agent config routes (MH4)
+	createConfigRoutes(baseApp, providerRouter, configManager)
 
 	return baseApp
 }
