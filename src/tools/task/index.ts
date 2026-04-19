@@ -35,6 +35,7 @@ export interface TaskParams {
 }
 
 export const DEFAULT_MAX_CHILDREN = 4
+export const DEFAULT_MAX_TASK_DEPTH = 4
 
 function readOptionalNumber(value: unknown): number | undefined {
 	return typeof value === 'number' && Number.isFinite(value) ? value : undefined
@@ -93,8 +94,8 @@ Depth and concurrency limits are enforced by agent configuration.`,
 					: null
 
 			// TODO(task-9.4): remove dynamic field access once schema adds explicit fields.
-			const maxDepth = readOptionalNumber(resolvedConfigRecord?.maxTaskDepth)
-			if (maxDepth !== undefined && (currentRun.depth ?? 0) >= maxDepth) {
+			const maxDepth = readOptionalNumber(resolvedConfigRecord?.maxTaskDepth) ?? DEFAULT_MAX_TASK_DEPTH
+			if ((currentRun.depth ?? 0) >= maxDepth) {
 				return err({
 					code: 'VALIDATION_ERROR',
 					message: `Agent depth limit reached: current depth ${currentRun.depth ?? 0} >= maxTaskDepth ${maxDepth} for agent type "${params.agent_type}"`,

@@ -189,17 +189,21 @@ describe('createTaskTool', () => {
 		database.close()
 	})
 
-	it('does not apply depth guard when maxTaskDepth is undefined', async () => {
-		const { deps, database } = buildDeps({ currentDepth: 10 })
+	it('returns err when depth >= fallback maxTaskDepth when config omits maxTaskDepth', async () => {
+		const { deps, database } = buildDeps({ currentDepth: 4 })
 		const tool = createTaskTool(deps)
 
 		const result = await tool.execute({
-			description: 'no depth limit test',
+			description: 'fallback depth limit test',
 			prompt: 'do something',
 			agent_type: 'researcher',
 		})
 
-		expect(result.ok).toBe(true)
+		expect(result.ok).toBe(false)
+		if (result.ok) return
+
+		expect(result.error.code).toBe('VALIDATION_ERROR')
+		expect(result.error.message).toContain('maxTaskDepth 4')
 		database.close()
 	})
 
