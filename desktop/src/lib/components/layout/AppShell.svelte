@@ -103,7 +103,10 @@
 	:global(.sidebar.glass-md::before) {
 		backdrop-filter: none;
 		-webkit-backdrop-filter: none;
-		background: var(--color-surface);
+		/* Use surface-elevated so the sidebar reads distinctly lighter than
+		   the page background (#09090e) — creates the separation that makes
+		   the nav panel feel like a physical object, not a merged dark wall. */
+		background: var(--color-surface-elevated);
 		opacity: 1;
 		border: none;
 	}
