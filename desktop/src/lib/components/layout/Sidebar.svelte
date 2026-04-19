@@ -311,85 +311,76 @@
 </nav>
 
 <style>
+	/* ── Sidebar nav shell ────────────────────────────────────────── */
 	.sidebar-nav {
 		display: flex;
 		flex-direction: column;
 		height: 100%;
-		padding: var(--space-3) 0;
+		padding: 0;
 		overflow: hidden;
 		position: relative;
 	}
 
-	/* Vertical accent line — left edge */
-	.sidebar-nav::before {
-		content: '';
-		position: absolute;
-		top: 0;
-		left: 0;
-		width: 2px;
-		height: 100%;
-		background: linear-gradient(
-			to bottom,
-			transparent 0%,
-			var(--color-primary) 20%,
-			var(--color-primary) 80%,
-			transparent 100%
-		);
-		opacity: 0.6;
-		pointer-events: none;
-	}
-
+	/* ── Brand / Logo area ───────────────────────────────────────── */
 	.sidebar-brand {
 		display: flex;
 		align-items: center;
 		gap: var(--space-3);
-		padding: var(--space-3) var(--space-4);
-		margin-bottom: var(--space-3);
-		height: 48px;
+		padding: var(--space-5) var(--space-4) var(--space-4);
 		flex-shrink: 0;
 	}
 
 	.brand-mark {
-		width: 28px;
-		height: 28px;
+		width: 26px;
+		height: 26px;
 		border-radius: var(--radius-md);
 		background-color: var(--color-primary);
-		color: var(--color-primary-foreground);
+		color: #fff;
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		font-weight: var(--font-weight-bold);
-		font-size: var(--font-size-lg);
+		font-size: 13px;
+		font-family: var(--font-serif);
+		font-style: italic;
+		font-weight: var(--font-weight-normal);
 		flex-shrink: 0;
-		font-family: var(--font-mono);
-		box-shadow: var(--glow-primary);
-		transition: box-shadow var(--transition-fast);
+		/* No glow — quiet logo mark */
+		transition: opacity var(--duration-fast) var(--ease-out-expo);
+	}
+
+	.brand-mark:hover {
+		opacity: 0.85;
 	}
 
 	.brand-name {
-		font-weight: var(--font-weight-semibold);
-		font-size: var(--font-size-md);
+		font-family: var(--font-serif);
+		font-style: italic;
+		font-weight: var(--font-weight-normal);
+		font-size: var(--font-size-base);
 		color: var(--color-text-primary);
-		letter-spacing: var(--tracking-tight);
+		letter-spacing: -0.01em;
 		white-space: nowrap;
 		overflow: hidden;
+		opacity: 0.9;
 	}
 
+	/* ── Projects section ────────────────────────────────────────── */
 	.sidebar-top {
 		flex: 1;
 		min-height: 0;
 		overflow-y: auto;
 		overflow-x: hidden;
-		padding: 0 var(--space-2);
+		padding: 0 var(--space-3);
 	}
 
 	.section-label {
-		padding: var(--space-2) var(--space-3);
+		padding: var(--space-1) var(--space-2) var(--space-2);
 		font-size: var(--font-size-2xs);
 		font-weight: var(--font-weight-semibold);
-		letter-spacing: var(--tracking-widest);
+		letter-spacing: 0.08em;
 		text-transform: uppercase;
 		color: var(--color-text-disabled);
+		font-family: var(--font-mono);
 	}
 
 	.project-list {
@@ -398,17 +389,17 @@
 		margin: 0;
 		display: flex;
 		flex-direction: column;
-		gap: 2px;
+		gap: 1px;
 	}
 
 	.empty-state {
-		padding: var(--space-2) var(--space-3);
+		padding: var(--space-2) var(--space-2);
 		font-size: var(--font-size-sm);
 		color: var(--color-text-muted);
 		font-style: italic;
 	}
 
-	/* --- Collapsed mode: avatar column --------------------------------- */
+	/* ── Collapsed avatar column ─────────────────────────────────── */
 	.avatar-stack {
 		list-style: none;
 		padding: 0;
@@ -429,12 +420,12 @@
 		background: transparent;
 		cursor: pointer;
 		transition:
-			border-color var(--transition-fast),
-			box-shadow var(--transition-fast);
+			border-color var(--duration-fast) var(--ease-out-expo),
+			box-shadow var(--duration-fast) var(--ease-out-expo);
 	}
 
 	.avatar-button:hover {
-		border-color: var(--color-border);
+		border-color: var(--color-border-strong);
 	}
 
 	.avatar-button:focus-visible {
@@ -445,39 +436,52 @@
 
 	.avatar-button.active {
 		border-color: var(--color-primary);
-		box-shadow: var(--glow-primary);
 	}
 
-	/* --- Bottom-pinned navigation -------------------------------------- */
+	/* ── Bottom-pinned navigation ────────────────────────────────── */
 	.bottom-nav {
 		list-style: none;
 		margin: 0;
-		padding: var(--space-2) var(--space-2) 0 var(--space-2);
+		padding: var(--space-3) var(--space-3) var(--space-4);
 		display: flex;
 		flex-direction: column;
-		gap: 2px;
+		gap: 1px;
 		flex-shrink: 0;
-		border-top: 1px solid var(--color-border);
+		/* Faint separator — no hard border line */
+		position: relative;
 	}
 
+	.bottom-nav::before {
+		content: '';
+		position: absolute;
+		top: 0;
+		left: var(--space-4);
+		right: var(--space-4);
+		height: 1px;
+		background: var(--color-border);
+		opacity: 0.6;
+	}
+
+	/* ── Nav items — the core redesign ──────────────────────────── */
 	.nav-item {
 		display: flex;
 		align-items: center;
 		gap: var(--space-3);
 		width: 100%;
-		padding: var(--space-2) var(--space-3);
+		padding: 7px var(--space-3);
 		border-radius: var(--radius-md);
 		border: none;
 		background: transparent;
 		color: var(--color-text-secondary);
 		cursor: pointer;
 		text-align: left;
-		font-size: var(--font-size-md);
+		font-size: var(--font-size-sm);
 		font-family: var(--font-sans);
+		font-weight: var(--font-weight-normal);
+		/* Smooth, fast transitions — no spring on hover (looks jittery for nav) */
 		transition:
-			color var(--transition-fast),
-			background-color var(--transition-fast),
-			box-shadow var(--transition-fast);
+			color var(--duration-fast) var(--ease-out-expo),
+			background-color var(--duration-fast) var(--ease-out-expo);
 		white-space: nowrap;
 		overflow: hidden;
 		position: relative;
@@ -488,10 +492,26 @@
 		background-color: var(--color-surface-hover);
 	}
 
+	/* THE ACTIVE STATE — clean, confident, flat pill */
 	.nav-item.active {
-		color: var(--color-primary);
-		background-color: var(--color-primary-subtle);
-		box-shadow: inset 2px 0 0 var(--color-primary), var(--glow-primary);
+		color: #fff;
+		background-color: var(--color-primary);
+		font-weight: var(--font-weight-medium);
+	}
+
+	/* Dark mode: slightly softer active pill */
+	:global([data-theme="dark"]) .nav-item.active {
+		background-color: var(--color-primary);
+		color: #fff;
+		/* Single subtle inner highlight — very faint specular top */
+		box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
+	}
+
+	/* Light mode: same pill, same colour, slightly richer */
+	:global([data-theme="light"]) .nav-item.active {
+		background-color: var(--color-primary);
+		color: #fff;
+		box-shadow: 0 1px 4px rgba(64, 73, 225, 0.3);
 	}
 
 	.nav-item:focus-visible {
@@ -499,22 +519,30 @@
 		box-shadow: var(--glow-focus);
 	}
 
+	/* Active icon inherits white from parent color */
 	.nav-icon {
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		width: 20px;
-		height: 20px;
+		width: 18px;
+		height: 18px;
 		flex-shrink: 0;
 		color: currentColor;
+		opacity: 1;
+	}
+
+	/* Inactive icons are slightly dimmer */
+	.nav-item:not(.active) .nav-icon {
+		opacity: 0.7;
 	}
 
 	.nav-label {
-		font-weight: var(--font-weight-medium);
+		font-weight: inherit;
 		overflow: hidden;
 		text-overflow: ellipsis;
 	}
 
+	/* ── Collapsed mode ──────────────────────────────────────────── */
 	.sidebar-nav.collapsed .nav-item {
 		justify-content: center;
 		padding: var(--space-2);
@@ -522,10 +550,14 @@
 
 	.sidebar-nav.collapsed .sidebar-brand {
 		justify-content: center;
-		padding: var(--space-3) var(--space-2);
+		padding: var(--space-4) var(--space-2) var(--space-3);
 	}
 
 	.sidebar-nav.collapsed .sidebar-top {
-		padding: var(--space-2) 0;
+		padding: var(--space-2) var(--space-2);
+	}
+
+	.sidebar-nav.collapsed .bottom-nav {
+		padding: var(--space-3) var(--space-2) var(--space-4);
 	}
 </style>

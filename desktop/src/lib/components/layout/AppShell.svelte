@@ -47,21 +47,34 @@
 		position: relative;
 	}
 
-	/* Ambient glow behind sidebar */
+	/* Aurora light field — gives glass surfaces rich tonal variation to refract */
 	.app-shell::before {
 		content: '';
 		position: absolute;
-		top: -20%;
-		left: -10%;
-		width: 60%;
-		height: 140%;
-		background: radial-gradient(
-			ellipse at center,
-			rgba(245, 166, 35, 0.06) 0%,
-			transparent 70%
-		);
+		inset: -20%;
 		pointer-events: none;
 		z-index: 0;
+		/* Primary indigo orb — left-centre (behind sidebar) */
+		background:
+			radial-gradient(circle at 12% 45%, rgba(64, 73, 225, 0.28) 0%, transparent 48%),
+			radial-gradient(circle at 8%  80%, rgba(48, 56, 200, 0.14) 0%, transparent 40%),
+			radial-gradient(circle at 55% 10%, rgba(80, 90, 240, 0.10) 0%, transparent 42%),
+			radial-gradient(circle at 90% 60%, rgba(40, 50, 180, 0.08) 0%, transparent 38%);
+		filter: blur(40px);
+	}
+
+	/* Secondary teal accent orb — top right, very subtle */
+	.app-shell::after {
+		content: '';
+		position: absolute;
+		inset: -20%;
+		pointer-events: none;
+		z-index: 0;
+		background:
+			radial-gradient(circle at 78% 15%, rgba(80, 200, 255, 0.07) 0%, transparent 38%),
+			radial-gradient(circle at 25% 95%, rgba(100, 80, 255, 0.09) 0%, transparent 35%);
+		filter: blur(60px);
+		mix-blend-mode: screen;
 	}
 
 	.app-shell.sidebar-collapsed {
@@ -73,11 +86,39 @@
 		grid-column: 1 / 2;
 		display: flex;
 		flex-direction: column;
-		overflow: hidden;
+		/* `clip` (vs hidden) preserves mix-blend-mode rendering for the
+		   .glass-md ::after specular sheen layer. */
+		overflow: clip;
 		height: 100vh;
 		position: relative;
 		z-index: var(--z-sticky);
 		transition: width var(--transition-spring);
+	}
+
+	/* Sidebar solid-surface override — cancels glass-md blur on the sidebar
+	   panel so the navigation rail reads as a confident, slightly elevated
+	   solid surface rather than a transparent blur rectangle. The glass-md
+	   ::before/::after layers live in global glass.css, so we reach them
+	   with :global(). */
+	:global(.sidebar.glass-md::before) {
+		backdrop-filter: none;
+		-webkit-backdrop-filter: none;
+		/* Use surface-elevated so the sidebar reads distinctly lighter than
+		   the page background (#09090e) — creates the separation that makes
+		   the nav panel feel like a physical object, not a merged dark wall. */
+		background: var(--color-surface-elevated);
+		opacity: 1;
+		border: none;
+	}
+
+	:global(.sidebar.glass-md) {
+		box-shadow: none;
+		border: none;
+		border-right: 1px solid var(--color-border);
+	}
+
+	:global(.sidebar.glass-md::after) {
+		display: none;
 	}
 
 	.main-area {
@@ -100,13 +141,25 @@
 		position: sticky;
 		top: 0;
 		z-index: var(--z-sticky);
+		/* Reset the border shorthand from .glass-sm so the topbar reads as a
+		   floating glass shelf with only a hairline at its bottom edge. */
+		border-top: none;
+		border-left: none;
+		border-right: none;
+		border-radius: 0;
 	}
 
 	.content {
 		grid-row: 2 / 3;
 		overflow-y: auto;
 		overflow-x: hidden;
-		background-color: var(--color-bg);
+		/* Subtle indigo vignette in the upper-left of the content area —
+		   lets the aurora bleed through visually without painting it. */
+		background: radial-gradient(
+			ellipse at 30% 20%,
+			rgba(64, 73, 225, 0.04) 0%,
+			var(--color-bg) 60%
+		);
 		position: relative;
 	}
 
