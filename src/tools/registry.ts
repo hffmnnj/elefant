@@ -12,6 +12,7 @@ import { readTool } from './read.js';
 import { bashTool } from './shell/index.js';
 import { skillTool } from './skill/index.js';
 import { todoreadTool, todowriteTool } from './todo/index.js';
+import { createToolListTool } from './tool_list/index.js';
 import { webfetchTool } from './webfetch.js';
 import { websearchTool } from './websearch.js';
 import { writeTool } from './write.js';
@@ -172,5 +173,9 @@ export function createToolRegistry(hookRegistry: HookRegistry): ToolRegistry {
 	registry.register(questionTool);
 	registry.register(skillTool);
 	registry.register(lspTool);
+	// tool_list is registered last so it reflects the complete set, including
+	// any tools registered above it. Plugins that register tools after startup
+	// are also included since the factory closes over the live registry instance.
+	registry.register(createToolListTool(registry));
 	return registry;
 }
