@@ -6,11 +6,15 @@ import type { ProviderRouter } from '../providers/router.ts'
 import type { StreamEvent } from '../providers/types.ts'
 import type { Message } from '../types/providers.ts'
 import type { ToolCall, ToolResult } from '../types/tools.ts'
-import type { ToolRegistry } from '../tools/registry.ts'
+import { createToolRegistryForRun, type ToolRegistry } from '../tools/registry.ts'
 import { runAgentLoop } from './agent-loop.ts'
 import { formatSSEEvent, formatSSEKeepalive } from './sse.ts'
 import type { QuestionSsePayload } from '../tools/question/emitter.ts'
 import type { RunContext } from '../runs/types.ts'
+import type { Database } from '../db/database.ts'
+import type { RunRegistry } from '../runs/registry.ts'
+import type { SseManager } from '../transport/sse-manager.ts'
+import type { ConfigManager } from '../config/loader.ts'
 
 const toolCallSchema = z.object({
 	id: z.string().min(1),
@@ -28,6 +32,7 @@ const messageSchema = z.object({
 const chatRequestSchema = z.object({
 	messages: z.array(messageSchema).min(1),
 	sessionId: z.string().min(1).optional(),
+	projectId: z.string().min(1).optional(),
 	provider: z.string().min(1).optional(),
 	maxIterations: z.number().int().positive().max(200).optional(),
 	maxTokens: z.number().int().positive().optional(),
@@ -227,11 +232,19 @@ function createSSEStream(
 	})
 }
 
+export interface ConversationRouteDeps {
+	database: Database
+	runRegistry: RunRegistry
+	sseManager: SseManager | undefined
+	configManager: ConfigManager
+}
+
 export function createConversationRoute<TApp extends Elysia>(
 	app: TApp,
 	providerRouter: ProviderRouter,
 	toolRegistry: ToolRegistry,
 	hookRegistry: HookRegistry,
+	runDeps?: ConversationRouteDeps,
 ): TApp {
 	app.post('/api/chat', ({ body, set }) => {
 		const parsed = chatRequestSchema.safeParse(body)
@@ -258,21 +271,42 @@ export function createConversationRoute<TApp extends Elysia>(
 		// Use the caller-supplied sessionId so the desktop can associate a chat
 		// with a persisted session. Fall back to a fresh UUID for CLI/API callers.
 		const sessionId = parsed.data.sessionId ?? crypto.randomUUID()
+		const projectId = parsed.data.projectId ?? 'chat'
 		const runId = `chat:${sessionId}:${crypto.randomUUID()}`
 		const abortController = new AbortController()
+
+		const runContext: RunContext = {
+			runId,
+			depth: 0,
+			agentType: 'primary',
+			title: 'chat',
+			sessionId,
+			projectId,
+			signal: abortController.signal,
+		}
+
+		// Use the per-run registry (includes task + wait_on_run) when the
+		// desktop supplies a real projectId. Fall back to the static registry
+		// for CLI/API callers that don't have a project context.
+		const activeRegistry =
+			runDeps && parsed.data.projectId
+				? createToolRegistryForRun({
+						hookRegistry,
+						database: runDeps.database,
+						runRegistry: runDeps.runRegistry,
+						sseManager: runDeps.sseManager,
+						providerRouter,
+						configManager: runDeps.configManager,
+						currentRun: runContext,
+					})
+				: toolRegistry
+
 		const stream = createSSEStream(
 			providerRouter,
-			toolRegistry,
+			activeRegistry,
 			hookRegistry,
 			parsed.data,
-			{
-				runId,
-				agentType: 'primary',
-				title: 'chat',
-				sessionId,
-				projectId: 'chat',
-				signal: abortController.signal,
-			},
+			runContext,
 			abortController,
 		)
 		return new Response(stream, {

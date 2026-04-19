@@ -67,7 +67,7 @@
 			// Build the request payload through the store helper so the
 			// AdvancedOptions fields and any per-run AgentOverrideDialog
 			// override flow through a single, testable code path.
-		const fields = chatStore.buildChatRequestFields(projectsStore.activeSessionId);
+		const fields = chatStore.buildChatRequestFields(projectsStore.activeSessionId, projectsStore.activeProjectId);
 		const stream = client.streamChat(
 			{ messages: apiMessages, ...fields },
 				abortController.signal,

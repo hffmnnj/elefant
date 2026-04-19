@@ -80,16 +80,24 @@ export function createApp(
 	// Register question tool route for HITL interactions
 	registerQuestionRoute(app as unknown as Elysia)
 
+	// Create shared run infrastructure before routes so /api/chat
+	// and /api/projects/.../agent-runs share the same registry + config.
+	const runRegistry = new RunRegistry()
+	const configManager = new ConfigManager()
+
 	const baseApp = registerServerRoutes(
 		app as unknown as Elysia,
 		providerRouter,
 		toolRegistry,
 		hookRegistry,
 		db,
+		{
+			database: db,
+			runRegistry,
+			sseManager: sse,
+			configManager,
+		},
 	)
-
-	const runRegistry = new RunRegistry()
-	const configManager = new ConfigManager()
 
 	// Mount transport routes when available
 	if (ws) mountWsRoute(baseApp, ws)
@@ -106,6 +114,7 @@ export function createApp(
 		hookRegistry,
 		runRegistry,
 		sseManager: sse,
+		configManager,
 	})
 
 	// Mount worktree management routes (MH5)
