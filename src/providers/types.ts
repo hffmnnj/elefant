@@ -51,6 +51,8 @@ export interface SendMessageOptions {
 	provider?: string
 	temperature?: number
 	maxTokens?: number
+	topP?: number
+	timeoutMs?: number
 	signal?: AbortSignal
 }
 

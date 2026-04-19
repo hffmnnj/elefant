@@ -64,6 +64,48 @@
 				<span class="range-value">{chatStore.temperature.toFixed(1)}</span>
 			</div>
 		</div>
+
+		<div class="option-field">
+			<label class="option-label" for="topP">Top P</label>
+			<div class="range-wrapper">
+				<input
+					id="topP"
+					type="range"
+					class="option-range"
+					min="0"
+					max="1"
+					step="0.05"
+					value={chatStore.topP}
+					oninput={(e) =>
+						chatStore.setTopP(
+							parseFloat((e.currentTarget as HTMLInputElement).value),
+						)}
+					aria-valuemin={0}
+					aria-valuemax={1}
+					aria-valuenow={chatStore.topP}
+				/>
+				<span class="range-value">{chatStore.topP.toFixed(2)}</span>
+			</div>
+		</div>
+
+		<div class="option-field">
+			<label class="option-label" for="timeoutMs">Timeout (ms)</label>
+			<input
+				id="timeoutMs"
+				type="number"
+				class="option-input"
+				min="1000"
+				max="300000"
+				step="1000"
+				value={chatStore.timeoutMs}
+				oninput={(e) =>
+					chatStore.setTimeoutMs(
+						parseInt((e.currentTarget as HTMLInputElement).value) || 60000,
+					)}
+				aria-describedby="timeoutMs-desc"
+			/>
+			<span id="timeoutMs-desc" class="option-hint">1000–300000</span>
+		</div>
 	</div>
 </div>
 

@@ -9,7 +9,7 @@ import type { ToolCall, ToolResult } from '../types/tools.ts'
 import type { ToolRegistry } from '../tools/registry.ts'
 import { runAgentLoop } from './agent-loop.ts'
 import { formatSSEEvent, formatSSEKeepalive } from './sse.ts'
-import { setQuestionEmitter, type QuestionSsePayload } from '../tools/question/emitter.ts'
+import type { QuestionSsePayload } from '../tools/question/emitter.ts'
 
 const toolCallSchema = z.object({
 	id: z.string().min(1),
@@ -30,6 +30,8 @@ const chatRequestSchema = z.object({
 	maxIterations: z.number().int().positive().max(200).optional(),
 	maxTokens: z.number().int().positive().optional(),
 	temperature: z.number().min(0).max(2).optional(),
+	topP: z.number().min(0).max(1).optional(),
+	timeoutMs: z.number().int().positive().optional(),
 })
 
 const SSE_HEADERS = {
@@ -113,6 +115,7 @@ function createSSEStream(
 	toolRegistry: ToolRegistry,
 	hookRegistry: HookRegistry,
 	request: z.infer<typeof chatRequestSchema>,
+	conversationId: string,
 ): ReadableStream<Uint8Array> {
 	const abortController = new AbortController()
 	let keepaliveTimer: ReturnType<typeof setInterval> | null = null
@@ -128,9 +131,6 @@ function createSSEStream(
 			clearInterval(keepaliveTimer)
 			keepaliveTimer = null
 		}
-
-		// Clear question emitter to prevent stale callbacks
-		setQuestionEmitter(null)
 
 		if (abortUpstream) {
 			abortController.abort()
@@ -151,17 +151,16 @@ function createSSEStream(
 				encodeSSEChunk(controller, formatSSEKeepalive())
 			}, 15_000)
 
-			// Set up question emitter for this stream
-			setQuestionEmitter((payload: QuestionSsePayload) => {
+			const questionEmitter = (payload: QuestionSsePayload): void => {
 				encodeSSEChunk(controller, toQuestionSSEChunk(payload))
-			})
+			}
 
 			void (async () => {
 				try {
 					await emit(hookRegistry, 'stream:start', {
 						provider: request.provider ?? 'default',
 						model: 'unknown',
-						conversationId: 'default',
+						conversationId,
 					})
 
 					const agentLoop = runAgentLoop(providerRouter, toolRegistry, {
@@ -169,8 +168,14 @@ function createSSEStream(
 						tools: toolRegistry.getAll(),
 						provider: request.provider,
 						maxIterations: request.maxIterations,
+						maxTokens: request.maxTokens,
+						temperature: request.temperature,
+						topP: request.topP,
+						timeoutMs: request.timeoutMs,
 						signal: abortController.signal,
 						hookRegistry,
+						conversationId,
+						questionEmitter,
 					})
 
 					for await (const streamEvent of agentLoop) {
@@ -202,7 +207,7 @@ function createSSEStream(
 					await emit(hookRegistry, 'stream:end', {
 						provider: request.provider ?? 'default',
 						model: 'unknown',
-						conversationId: 'default',
+						conversationId,
 					})
 					cleanup(false)
 					closeController()
@@ -245,7 +250,15 @@ export function createConversationRoute<TApp extends Elysia>(
 			}
 		}
 
-		const stream = createSSEStream(providerRouter, toolRegistry, hookRegistry, parsed.data)
+		const sessionId = crypto.randomUUID()
+		const runId = `chat:${sessionId}:${crypto.randomUUID()}`
+		const stream = createSSEStream(
+			providerRouter,
+			toolRegistry,
+			hookRegistry,
+			parsed.data,
+			runId,
+		)
 		return new Response(stream, {
 			headers: SSE_HEADERS,
 		})

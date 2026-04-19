@@ -251,6 +251,10 @@ export class AnthropicAdapter implements ProviderAdapter {
 			requestBody.temperature = options.temperature
 		}
 
+		if (typeof options?.topP === 'number') {
+			requestBody.top_p = options.topP
+		}
+
 		let response: Response
 		try {
 			response = await fetch(endpoint, {

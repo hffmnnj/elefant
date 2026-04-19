@@ -37,6 +37,8 @@
 					maxIterations: chatStore.maxIterations,
 					maxTokens: chatStore.maxTokens > 0 ? chatStore.maxTokens : undefined,
 					temperature: chatStore.temperature,
+					topP: chatStore.topP,
+					timeoutMs: chatStore.timeoutMs,
 				},
 				abortController.signal,
 			);

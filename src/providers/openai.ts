@@ -176,6 +176,10 @@ export class OpenAIAdapter implements ProviderAdapter {
 			requestBody.max_tokens = options.maxTokens
 		}
 
+		if (typeof options?.topP === 'number') {
+			requestBody.top_p = options.topP
+		}
+
 		let response: Response
 		try {
 			response = await fetch(endpoint, {

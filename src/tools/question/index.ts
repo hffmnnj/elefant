@@ -9,7 +9,7 @@ import type { ElefantError } from '../../types/errors.js';
 import type { Result } from '../../types/result.js';
 import { ok, err } from '../../types/result.js';
 import { questionBroker, type AnswerPayload } from './broker.js';
-import { emitQuestion } from './emitter.js';
+import type { QuestionEmitter } from './emitter.js';
 
 export interface QuestionOption {
 	label: string;
@@ -26,6 +26,7 @@ export interface Question {
 export interface QuestionParams {
 	questions: Question[];
 	conversationId?: string;
+	_questionEmitter?: QuestionEmitter;
 }
 
 /**
@@ -70,6 +71,7 @@ export const questionTool: ToolDefinition<QuestionParams, string> = {
 		}
 
 		const { questions } = params;
+		const questionEmitter = params._questionEmitter;
 
 		if (!questions || questions.length === 0) {
 			return err({
@@ -109,7 +111,7 @@ export const questionTool: ToolDefinition<QuestionParams, string> = {
 			const answerPromise = questionBroker.register(questionId, 60_000);
 
 			// Emit question event to SSE stream so frontend can render it
-			emitQuestion({
+			questionEmitter?.({
 				questionId,
 				question: question.question,
 				header: question.header,

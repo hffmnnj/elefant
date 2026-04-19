@@ -152,4 +152,40 @@ describe('createConversationRoute', () => {
 
 		expect(abortObserved).toBe(true)
 	})
+
+	it('forwards maxTokens, temperature, topP, and timeoutMs to provider', async () => {
+		let receivedOptions: SendMessageOptions | undefined
+
+		const adapter: ProviderAdapter = {
+			name: 'mock-provider',
+			async *sendMessage(
+				_messages,
+				_tools,
+				options?: SendMessageOptions,
+			): AsyncGenerator<StreamEvent> {
+				receivedOptions = options
+				yield { type: 'text_delta', text: 'Hello' }
+				yield { type: 'done', finishReason: 'stop' }
+			},
+		}
+
+		const app = createAppWithRouter(createMockRouter({ ok: true, data: adapter }))
+		const response = await app.handle(
+			createJsonRequest({
+				messages: [{ role: 'user', content: 'Hello' }],
+				provider: 'mock-provider',
+				maxTokens: 50,
+				temperature: 0.5,
+				topP: 0.9,
+				timeoutMs: 30000,
+			}),
+		)
+
+		expect(response.status).toBe(200)
+		expect(receivedOptions).toBeDefined()
+		expect(receivedOptions?.maxTokens).toBe(50)
+		expect(receivedOptions?.temperature).toBe(0.5)
+		expect(receivedOptions?.topP).toBe(0.9)
+		expect(receivedOptions?.timeoutMs).toBe(30000)
+	})
 })

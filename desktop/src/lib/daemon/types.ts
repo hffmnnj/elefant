@@ -33,6 +33,8 @@ export interface ChatRequest {
 	maxIterations?: number;
 	maxTokens?: number;
 	temperature?: number;
+	topP?: number;
+	timeoutMs?: number;
 }
 
 // SSE Event types (discriminated union)

@@ -3,6 +3,7 @@ import type { CompactionManager } from '../compaction/manager.ts'
 import type { PermissionGate } from '../permissions/gate.ts'
 import type { ProviderRouter } from '../providers/router.ts'
 import type { StreamEvent } from '../providers/types.ts'
+import { createQuestionEmitter, type QuestionEmitter } from '../tools/question/emitter.ts'
 import type { ElefantError } from '../types/errors.ts'
 import { type Message } from '../types/providers.ts'
 import type { Result } from '../types/result.ts'
@@ -17,11 +18,16 @@ export interface AgentLoopOptions {
 	tools: ToolDefinition[]
 	provider?: string
 	maxIterations?: number
+	maxTokens?: number
+	temperature?: number
+	topP?: number
+	timeoutMs?: number
 	signal?: AbortSignal
 	hookRegistry: HookRegistry
 	permissions?: PermissionGate
 	compaction?: CompactionManager
-	conversationId?: string
+	conversationId: string
+	questionEmitter?: QuestionEmitter
 }
 
 function estimateTokenCount(messages: Message[]): number {
@@ -37,6 +43,23 @@ function createToolResult(toolCallId: string, content: string, isError: boolean)
 	}
 }
 
+function toToolArguments(
+	args: unknown,
+	conversationId: string,
+	questionEmitter: QuestionEmitter,
+): Record<string, unknown> {
+	const baseArgs =
+		typeof args === 'object' && args !== null && !Array.isArray(args)
+			? (args as Record<string, unknown>)
+			: {}
+
+	return {
+		...baseArgs,
+		conversationId,
+		_questionEmitter: questionEmitter,
+	}
+}
+
 export async function* runAgentLoop(
 	router: ProviderRouter,
 	registry: ToolExecutor,
@@ -46,8 +69,12 @@ export async function* runAgentLoop(
 	let iterations = 0
 	let tokenCount = estimateTokenCount(messages)
 	const contextWindow = 200_000
-	const sessionId = options.conversationId ?? crypto.randomUUID()
+	const sessionId = options.conversationId
 	const maxIterations = options.maxIterations ?? 50
+	const runQuestionEmitter = createQuestionEmitter(
+		options.conversationId,
+		options.questionEmitter ?? (() => undefined),
+	)
 
 	while (iterations < maxIterations) {
 		iterations += 1
@@ -62,7 +89,7 @@ export async function* runAgentLoop(
 				tokenCount,
 				contextWindow,
 				sessionId,
-				conversationId: options.conversationId ?? sessionId,
+				conversationId: options.conversationId,
 			})
 			messages = compacted.messages
 			tokenCount = compacted.tokenCountAfter
@@ -87,6 +114,10 @@ export async function* runAgentLoop(
 		for await (const event of adapterResult.data.sendMessage(messages, options.tools, {
 			signal: options.signal,
 			provider: options.provider,
+			maxTokens: options.maxTokens,
+			temperature: options.temperature,
+			topP: options.topP,
+			timeoutMs: options.timeoutMs,
 		})) {
 			if (event.type === 'tool_call_complete') {
 				pendingToolCalls.push(event.toolCall)
@@ -137,7 +168,7 @@ export async function* runAgentLoop(
 			yield { type: 'tool_call_complete', toolCall }
 
 			// Permission gate check before tool execution
-			if (options.permissions && options.conversationId) {
+			if (options.permissions) {
 				const permResult = await options.permissions.check(
 					toolCall.name,
 					toolCall.arguments as Record<string, unknown>,
@@ -168,7 +199,10 @@ export async function* runAgentLoop(
 				}
 			}
 
-			const executeResult = await registry.execute(toolCall.name, toolCall.arguments)
+			const executeResult = await registry.execute(
+				toolCall.name,
+				toToolArguments(toolCall.arguments, options.conversationId, runQuestionEmitter),
+			)
 			const toolResult = createToolResult(
 				toolCall.id,
 				executeResult.ok ? executeResult.data : executeResult.error.message,

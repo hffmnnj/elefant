@@ -13,6 +13,8 @@ let selectedProvider = $state<string | null>(null);
 let maxIterations = $state(50);
 let maxTokens = $state(4096);
 let temperature = $state(1.0);
+let topP = $state(1.0);
+let timeoutMs = $state(60000);
 
 // Available providers (populated from config)
 let availableProviders = $state<string[]>([]);
@@ -188,6 +190,12 @@ export const chatStore = {
 	get temperature() {
 		return temperature;
 	},
+	get topP() {
+		return topP;
+	},
+	get timeoutMs() {
+		return timeoutMs;
+	},
 	get availableProviders() {
 		return availableProviders;
 	},
@@ -205,6 +213,12 @@ export const chatStore = {
 	},
 	setTemperature: (n: number) => {
 		temperature = n;
+	},
+	setTopP: (n: number) => {
+		topP = n;
+	},
+	setTimeoutMs: (n: number) => {
+		timeoutMs = n;
 	},
 	addUserMessage,
 	startAssistantMessage,
