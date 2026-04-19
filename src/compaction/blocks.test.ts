@@ -1,15 +1,21 @@
 import { afterEach, describe, expect, it } from 'bun:test';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { Database } from '../db/database.ts';
+import { emit } from '../hooks/emit.ts';
+import { HookRegistry } from '../hooks/registry.ts';
 import { insertEvent } from '../db/repo/events.ts';
 import { createDefaultState } from '../state/schema.ts';
 import {
-  buildAdlBlock,
-  buildStateBlock,
-  buildToolInstructionsBlock,
+	__getFileReadCountForTests,
+	__resetFileBlockCacheForTests,
+	buildAdlBlock,
+	buildSpecBlock,
+	buildStateBlock,
+	buildToolInstructionsBlock,
+	createCompactionBlockTransform,
 } from './blocks.ts';
 
 function seedProjectAndSession(
@@ -40,11 +46,12 @@ function seedProjectAndSession(
 describe('compaction blocks', () => {
   const tempDirs: string[] = [];
 
-  afterEach(() => {
-    for (const directory of tempDirs.splice(0)) {
-      rmSync(directory, { recursive: true, force: true });
-    }
-  });
+	afterEach(() => {
+		__resetFileBlockCacheForTests();
+		for (const directory of tempDirs.splice(0)) {
+			rmSync(directory, { recursive: true, force: true });
+		}
+	});
 
   it('buildStateBlock returns workflow state details', () => {
     const state = createDefaultState({
@@ -104,8 +111,136 @@ describe('compaction blocks', () => {
     expect(block).toBe('');
   });
 
-  it('buildToolInstructionsBlock includes registered tool names', () => {
-    const block = buildToolInstructionsBlock(['read', 'write']);
-    expect(block).toContain('read, write');
-  });
+	it('buildToolInstructionsBlock includes registered tool names', () => {
+		const block = buildToolInstructionsBlock(['read', 'write']);
+		expect(block).toContain('read, write');
+	});
+
+	it('createCompactionBlockTransform injects block content via system:transform hook', async () => {
+		const hooks = new HookRegistry();
+		hooks.register(
+			'system:transform',
+			createCompactionBlockTransform({
+				blocks: [
+					{ name: 'workflow', render: () => '## State\n- Phase: execute' },
+				],
+				budget: 1_000,
+			}),
+		);
+
+		const transformed = await emit(hooks, 'system:transform', {
+			messages: [{ role: 'user', content: 'hello' }],
+			sessionId: 'session-1',
+			conversationId: 'conv-1',
+			state: null,
+			budgets: { tokens: 1_000 },
+		});
+
+		expect(transformed.messages[0]).toEqual({
+			role: 'system',
+			content: '## State\n- Phase: execute',
+		});
+		expect(transformed.messages[1]).toEqual({ role: 'user', content: 'hello' });
+	});
+
+	it('clamps oversized injected content to token budget and logs warning', async () => {
+		const hooks = new HookRegistry();
+		const originalWarn = console.warn;
+		const warnings: string[] = [];
+		console.warn = (message?: unknown) => {
+			warnings.push(String(message ?? ''));
+		};
+
+		hooks.register(
+			'system:transform',
+			createCompactionBlockTransform({
+				blocks: [{ name: 'huge', render: () => 'x'.repeat(200) }],
+				budget: 10,
+			}),
+		);
+
+		const transformed = await emit(hooks, 'system:transform', {
+			messages: [{ role: 'user', content: 'hello' }],
+			sessionId: 'session-budget',
+			conversationId: 'conv-budget',
+			state: null,
+			budgets: { tokens: 10 },
+		});
+
+		console.warn = originalWarn;
+
+		expect(warnings.length).toBe(1);
+		expect(transformed.messages[0]?.role).toBe('system');
+		expect(transformed.messages[0]?.content.length).toBeLessThan(200);
+		expect(transformed.messages[1]).toEqual({ role: 'user', content: 'hello' });
+	});
+
+	it('file-backed block cache hits on same file and mtime', () => {
+		const directory = mkdtempSync(join(tmpdir(), 'elefant-compaction-cache-hit-'));
+		tempDirs.push(directory);
+		const specPath = join(directory, 'SPEC.md');
+		writeFileSync(specPath, '## Must-Haves\n- One\n## Out of Scope\n- Two\n', 'utf-8');
+
+		const first = buildSpecBlock(specPath);
+		const second = buildSpecBlock(specPath);
+
+		expect(first.length).toBeGreaterThan(0);
+		expect(second).toBe(first);
+		expect(__getFileReadCountForTests(specPath)).toBe(1);
+	});
+
+	it('file-backed block cache misses when mtime changes', () => {
+		const directory = mkdtempSync(join(tmpdir(), 'elefant-compaction-cache-miss-'));
+		tempDirs.push(directory);
+		const specPath = join(directory, 'SPEC.md');
+		writeFileSync(specPath, '## Must-Haves\n- One\n## Out of Scope\n- Two\n', 'utf-8');
+
+		const first = buildSpecBlock(specPath);
+		expect(first.length).toBeGreaterThan(0);
+		expect(__getFileReadCountForTests(specPath)).toBe(1);
+
+		writeFileSync(specPath, '## Must-Haves\n- Updated\n## Out of Scope\n- Two\n', 'utf-8');
+		const now = new Date();
+		utimesSync(specPath, now, new Date(now.getTime() + 2_000));
+
+		const second = buildSpecBlock(specPath);
+		expect(second).toContain('Updated');
+		expect(__getFileReadCountForTests(specPath)).toBe(2);
+	});
+
+	it('produces deterministic message ordering across identical invocations', async () => {
+		const hooks = new HookRegistry();
+		hooks.register(
+			'system:transform',
+			createCompactionBlockTransform({
+				blocks: [
+					{ name: 'a', render: () => 'A' },
+					{ name: 'b', render: () => 'B' },
+				],
+				budget: 1_000,
+			}),
+		);
+
+		const input = {
+			messages: [
+				{ role: 'system' as const, content: 'fixed header' },
+				{ role: 'user' as const, content: 'task' },
+			],
+			sessionId: 'session-det',
+			conversationId: 'conv-det',
+			state: { phase: 'execute' },
+			budgets: { tokens: 1_000 },
+		};
+
+		const first = await emit(hooks, 'system:transform', input);
+		const second = await emit(hooks, 'system:transform', input);
+
+		expect(JSON.stringify(first.messages)).toBe(JSON.stringify(second.messages));
+		expect(first.messages.map((message) => message.content)).toEqual([
+			'fixed header',
+			'A',
+			'B',
+			'task',
+		]);
+	});
 });

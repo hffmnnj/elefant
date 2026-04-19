@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'bun:test'
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 
+import {
+	__getFileReadCountForTests,
+	buildSpecBlock,
+	createCompactionBlockTransform,
+} from '../compaction/blocks.ts'
 import { emit, HookRegistry } from '../hooks/index.ts'
 import type { ProviderRouter } from '../providers/router.ts'
 import type { ProviderAdapter, StreamEvent } from '../providers/types.ts'
@@ -385,5 +393,198 @@ describe('runAgentLoop', () => {
 
 		expect(emittedA).toEqual(['conv-question-a'])
 		expect(emittedB).toEqual(['conv-question-b'])
+	})
+
+	it('emits system:transform per iteration and keeps transform output ephemeral', async () => {
+		const hooks = new HookRegistry()
+		let transformCalls = 0
+		hooks.register('system:transform', (context) => {
+			transformCalls += 1
+			return {
+				messages: [
+					{ role: 'system' as const, content: `ephemeral-${transformCalls}` },
+					...context.messages,
+				],
+			}
+		})
+
+		const capturedPayloads: Message[][] = []
+		let turn = 0
+		const adapter: ProviderAdapter = {
+			name: 'mock',
+			async *sendMessage(messages): AsyncGenerator<StreamEvent> {
+				capturedPayloads.push(messages.map((entry) => ({ ...entry })))
+				turn += 1
+				if (turn === 1) {
+					yield {
+						type: 'tool_call_complete',
+						toolCall: {
+							id: 'ephemeral-1',
+							name: 'mock-tool',
+							arguments: {},
+						},
+					}
+					yield { type: 'done', finishReason: 'tool_calls' }
+					return
+				}
+
+				yield { type: 'text_delta', text: 'done' }
+				yield { type: 'done', finishReason: 'stop' }
+			},
+		}
+
+		const initialMessages: Message[] = [{ role: 'user', content: 'start' }]
+		const initialSnapshot = JSON.stringify(initialMessages)
+		const registry: ToolExecutor = {
+			execute: async () => ({ ok: true, data: 'ok' }),
+		}
+
+		await collectEvents(
+			runAgentLoop(createRouter(adapter), registry, {
+				messages: initialMessages,
+				tools: EMPTY_TOOLS,
+				hookRegistry: hooks,
+				conversationId: 'conv-transform-ephemeral',
+			}),
+		)
+
+		expect(transformCalls).toBe(2)
+		expect(capturedPayloads.length).toBe(2)
+		expect(capturedPayloads[0][0]).toEqual({ role: 'system', content: 'ephemeral-1' })
+		expect(capturedPayloads[1][0]).toEqual({ role: 'system', content: 'ephemeral-2' })
+		expect(capturedPayloads[0].filter((message) => message.content.startsWith('ephemeral-')).length).toBe(1)
+		expect(capturedPayloads[1].filter((message) => message.content.startsWith('ephemeral-')).length).toBe(1)
+		expect(JSON.stringify(initialMessages)).toBe(initialSnapshot)
+	})
+
+	it('runs multiple system:transform handlers as a pipeline', async () => {
+		const hooks = new HookRegistry()
+		hooks.register('system:transform', (context) => ({
+			messages: [{ role: 'system' as const, content: 'A' }, ...context.messages],
+		}))
+		hooks.register('system:transform', (context) => ({
+			messages: [
+				{
+					role: 'system' as const,
+					content: `B(saw:${context.messages[0]?.content ?? 'none'})`,
+				},
+				...context.messages,
+			],
+		}))
+
+		const capturedPayloads: Message[][] = []
+		const adapter: ProviderAdapter = {
+			name: 'mock',
+			async *sendMessage(messages): AsyncGenerator<StreamEvent> {
+				capturedPayloads.push(messages.map((entry) => ({ ...entry })))
+				yield { type: 'done', finishReason: 'stop' }
+			},
+		}
+
+		await collectEvents(
+			runAgentLoop(createRouter(adapter), {
+				execute: async () => ({ ok: true, data: 'ok' }),
+			}, {
+				messages: [{ role: 'user', content: 'hello' }],
+				tools: EMPTY_TOOLS,
+				hookRegistry: hooks,
+				conversationId: 'conv-transform-pipeline',
+			}),
+		)
+
+		expect(capturedPayloads[0].map((message) => message.content)).toEqual([
+			'B(saw:A)',
+			'A',
+			'hello',
+		])
+	})
+
+	it('integration: transform fires, clamps budget, preserves ordering, and uses mtime cache', async () => {
+		const directory = mkdtempSync(join(tmpdir(), 'elefant-system-transform-integration-'))
+		const specPath = join(directory, 'SPEC.md')
+		writeFileSync(specPath, '# Contract\n' + 'x'.repeat(400), 'utf-8')
+
+		const hooks = new HookRegistry()
+		let transformFires = 0
+		hooks.register('system:transform', (context) => {
+			transformFires += 1
+			return {
+				messages: context.messages,
+			}
+		})
+		hooks.register(
+			'system:transform',
+			createCompactionBlockTransform({
+				blocks: [
+					{
+						name: 'cached-spec',
+						render: () => buildSpecBlock(specPath),
+					},
+				],
+				budget: 20,
+			}),
+		)
+
+		const warnings: string[] = []
+		const originalWarn = console.warn
+		console.warn = (message?: unknown) => {
+			warnings.push(String(message ?? ''))
+		}
+
+		const payloads: Message[][] = []
+		let turn = 0
+		const adapter: ProviderAdapter = {
+			name: 'mock',
+			async *sendMessage(messages): AsyncGenerator<StreamEvent> {
+				payloads.push(messages.map((entry) => ({ ...entry })))
+				turn += 1
+				if (turn <= 2) {
+					yield {
+						type: 'tool_call_complete',
+						toolCall: {
+							id: `integration-${turn}`,
+							name: 'mock-tool',
+							arguments: {},
+						},
+					}
+					yield { type: 'done', finishReason: 'tool_calls' }
+					return
+				}
+				yield { type: 'text_delta', text: 'final' }
+				yield { type: 'done', finishReason: 'stop' }
+			},
+		}
+
+		const inputMessages: Message[] = [
+			{ role: 'system', content: 'fixed-header' },
+			{ role: 'user', content: 'run' },
+		]
+		const inputSnapshot = JSON.stringify(inputMessages)
+
+		await collectEvents(
+			runAgentLoop(createRouter(adapter), {
+				execute: async () => ({ ok: true, data: 'ok' }),
+			}, {
+				messages: inputMessages,
+				tools: EMPTY_TOOLS,
+				hookRegistry: hooks,
+				conversationId: 'conv-transform-integration',
+			}),
+		)
+
+		console.warn = originalWarn
+		rmSync(directory, { recursive: true, force: true })
+
+		expect(transformFires).toBe(3)
+		expect(JSON.stringify(inputMessages)).toBe(inputSnapshot)
+		expect(payloads.length).toBe(3)
+		expect(payloads.every((messages) => messages[0]?.role === 'system')).toBe(true)
+		expect(payloads.every((messages) => messages[0]?.content === 'fixed-header')).toBe(true)
+		expect(payloads.every((messages) => messages[1]?.role === 'system')).toBe(true)
+		expect(payloads.every((messages) => messages[1]?.content.length <= 80)).toBe(true)
+		expect(warnings.length).toBeGreaterThan(0)
+
+		// The cached spec block render should read from disk only once for identical mtime.
+		expect(__getFileReadCountForTests(specPath)).toBe(1)
 	})
 })
