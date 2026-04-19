@@ -20,6 +20,25 @@ export interface SidebarChildRunRow {
 }
 
 /**
+ * Visual status indicator variant for a sidebar run row (MH3).
+ *
+ *   - `running`  — run is in flight (pulsing spinner dot)
+ *   - `blocked`  — run is awaiting an answer to an `agent_run.question`
+ *                  (yellow dot)
+ *   - `error`    — run terminated with an error (red dot)
+ *   - `unseen`   — run produced output the user has not yet focused
+ *                  (blue dot)
+ *   - `none`     — nothing to signal (done/cancelled, or an actively-
+ *                  focused running peer with no other signal)
+ */
+export type SidebarRunStatusVariant =
+	| 'running'
+	| 'blocked'
+	| 'error'
+	| 'unseen'
+	| 'none';
+
+/**
  * Inputs needed to decide whether the chain should render and what
  * rows it should contain. The helper never reaches into any store so
  * it stays trivially testable.
@@ -117,4 +136,90 @@ export function computeSidebarChildRunChain(
 export function buildChildRunRowIndent(depth: number): string {
 	const safeDepth = Math.max(0, Math.trunc(depth));
 	return `calc(var(--space-4) * ${safeDepth})`;
+}
+
+/**
+ * Decide the status indicator variant for a single sidebar run row
+ * (MH3 indicator logic).
+ *
+ * Priority order is explicit and deliberate — the dot at the top of
+ * the priority stack always wins. From highest to lowest:
+ *
+ *   1. `running`  — live work in progress dominates any other signal;
+ *                   the pulsing spinner is the load-bearing cue that
+ *                   something is happening *right now*.
+ *   2. `blocked`  — the run is waiting for the user to answer a
+ *                   question. If the agent has stopped to ask, that
+ *                   outranks stale error/unseen signals on other
+ *                   rows in the chain.
+ *   3. `error`    — terminal failure state the user needs to see.
+ *   4. `unseen`   — passive "new output here" hint; overridden by any
+ *                   active state above.
+ *   5. `none`     — nothing to signal (includes `done`, `cancelled`,
+ *                   and any status we don't surface with a dot).
+ *
+ * `isUnseen` and `isAwaitingQuestion` are accepted as booleans (not
+ * as the store functions themselves) so this helper stays pure and
+ * trivially testable.
+ */
+export function computeStatusVariant(
+	run: AgentRun,
+	isUnseen: boolean,
+	isAwaitingQuestion: boolean,
+): SidebarRunStatusVariant {
+	// 1. Running beats everything — the pulse conveys liveness.
+	if (run.status === 'running') return 'running';
+
+	// 2. Blocked beats error/unseen — actionable user-facing signal.
+	if (isAwaitingQuestion) return 'blocked';
+
+	// 3. Error is next — terminal failure surfaces clearly.
+	if (run.status === 'error') return 'error';
+
+	// 4. Unseen output is the softest signal.
+	if (isUnseen) return 'unseen';
+
+	// 5. Everything else (done, cancelled, quiet running-with-no-signal)
+	// renders without a dot.
+	return 'none';
+}
+
+/**
+ * Compute a rollup indicator variant for the session row itself, so
+ * the user can tell at a glance that a run inside the active child
+ * chain wants their attention — even when the chain is rendered.
+ *
+ * Uses the same priority stack as `computeStatusVariant`: the most
+ * attention-worthy variant found among any row in the chain wins.
+ * Returns `none` when the chain is empty or contains no notable
+ * states.
+ */
+export function computeRollupVariant(
+	rows: SidebarChildRunRow[],
+	isUnseen: (runId: string) => boolean,
+	isAwaitingQuestion: (runId: string) => boolean,
+): SidebarRunStatusVariant {
+	// Priority rank (lower = higher priority).
+	const rank: Record<SidebarRunStatusVariant, number> = {
+		running: 0,
+		blocked: 1,
+		error: 2,
+		unseen: 3,
+		none: 4,
+	};
+
+	let best: SidebarRunStatusVariant = 'none';
+	for (const row of rows) {
+		const variant = computeStatusVariant(
+			row.run,
+			isUnseen(row.run.runId),
+			isAwaitingQuestion(row.run.runId),
+		);
+		if (rank[variant] < rank[best]) {
+			best = variant;
+			// Early-out on the strongest signal — nothing beats running.
+			if (best === 'running') break;
+		}
+	}
+	return best;
 }

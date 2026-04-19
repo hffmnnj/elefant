@@ -47,8 +47,15 @@
 	import type { IconSvgElement } from '$lib/icons/index.js';
 	import ProjectAvatar from '../../../features/projects/ProjectAvatar.svelte';
 	import SidebarProjectRow from './SidebarProjectRow.svelte';
-	import { computeSidebarChildRunChain } from './sidebar-child-run-chain-state.js';
-	import type { SidebarChildRunRow } from './sidebar-child-run-chain-state.js';
+	import {
+		computeRollupVariant,
+		computeSidebarChildRunChain,
+		computeStatusVariant,
+	} from './sidebar-child-run-chain-state.js';
+	import type {
+		SidebarChildRunRow,
+		SidebarRunStatusVariant,
+	} from './sidebar-child-run-chain-state.js';
 
 	type Props = {
 		collapsed?: boolean;
@@ -112,6 +119,31 @@
 	function handleSelectChildRun(runId: string): void {
 		navigationStore.openChildRun(runId);
 	}
+
+	// Resolve the indicator variant for a single chain row by
+	// consulting the store's `isUnseen` + `isAwaitingQuestion`
+	// selectors. Passed to `SidebarProjectRow` so the presentational
+	// chain component stays pure.
+	function childRunStatusVariant(row: SidebarChildRunRow): SidebarRunStatusVariant {
+		return computeStatusVariant(
+			row.run,
+			agentRunsStore.isUnseen(row.run.runId),
+			agentRunsStore.isAwaitingQuestion(row.run.runId),
+		);
+	}
+
+	// Aggregate rollup indicator for the active session row — reflects
+	// the most attention-worthy state across the whole active chain so
+	// the user can spot a sub-agent issue without expanding anything.
+	const sessionRollupVariant = $derived<SidebarRunStatusVariant>(
+		activeChildChainRows.length > 0
+			? computeRollupVariant(
+					activeChildChainRows,
+					(id) => agentRunsStore.isUnseen(id),
+					(id) => agentRunsStore.isAwaitingQuestion(id),
+				)
+			: 'none',
+	);
 
 	type BottomNavItem = {
 		id: 'settings' | 'models' | 'about' | 'agent-config' | 'agent-runs' | 'worktrees';
@@ -241,6 +273,10 @@
 									: []}
 								activeChildRunId={navigationStore.currentChildRunId}
 								onSelectChildRun={handleSelectChildRun}
+								childRunStatusVariant={childRunStatusVariant}
+								sessionRollupVariant={projectsStore.activeProjectId === project.id
+									? sessionRollupVariant
+									: 'none'}
 							/>
 						</li>
 					{/each}

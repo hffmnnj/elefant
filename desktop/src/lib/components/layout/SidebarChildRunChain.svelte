@@ -7,22 +7,41 @@
 	// session row already represents the root). Each row is indented
 	// in proportion to its depth in the tree.
 	//
-	// The component is intentionally presentational — visibility rules
-	// and row computation live in the parent via
-	// `computeSidebarChildRunChain`. Callers pass the resolved rows and
-	// the click handler; we just draw them.
+	// Each row also carries a live status indicator reflecting the
+	// run's state:
+	//   - running → pulsing primary-colored dot
+	//   - blocked → yellow dot (awaiting a question answer)
+	//   - error   → red dot (terminated with error)
+	//   - unseen  → blue dot (new output the user hasn't focused yet)
+	//   - none    → no dot (done / cancelled / quiet)
+	//
+	// The component is intentionally presentational — visibility rules,
+	// row computation, and variant resolution live in the parent via
+	// the `sidebar-child-run-chain-state` pure helpers. Callers pass
+	// the resolved rows + the already-computed variant for each row
+	// and the click handler; we just draw them.
 
-	import type { SidebarChildRunRow } from './sidebar-child-run-chain-state.js';
+	import type {
+		SidebarChildRunRow,
+		SidebarRunStatusVariant,
+	} from './sidebar-child-run-chain-state.js';
 	import { buildChildRunRowIndent } from './sidebar-child-run-chain-state.js';
 
 	type Props = {
 		rows: SidebarChildRunRow[];
 		/** Active child run id — used to highlight the current row. */
 		activeChildRunId: string | null;
+		/**
+		 * Resolver for the status indicator variant of a given row.
+		 * The parent supplies this (it has access to the store's
+		 * `isUnseen` / `isAwaitingQuestion` selectors); we stay pure.
+		 */
+		getStatusVariant: (row: SidebarChildRunRow) => SidebarRunStatusVariant;
 		onSelectRun: (runId: string) => void;
 	};
 
-	let { rows, activeChildRunId, onSelectRun }: Props = $props();
+	let { rows, activeChildRunId, getStatusVariant, onSelectRun }: Props =
+		$props();
 
 	function handleKeydown(event: KeyboardEvent, runId: string): void {
 		if (event.key === 'Enter' || event.key === ' ') {
@@ -34,11 +53,33 @@
 	function rowLabel(title: string): string {
 		return title.trim() || 'Untitled run';
 	}
+
+	/**
+	 * Human-readable label for the status indicator, announced to
+	 * assistive tech via aria-label. Empty when there is no dot.
+	 */
+	function variantLabel(variant: SidebarRunStatusVariant): string {
+		switch (variant) {
+			case 'running':
+				return 'Running';
+			case 'blocked':
+				return 'Awaiting answer';
+			case 'error':
+				return 'Error';
+			case 'unseen':
+				return 'New output';
+			case 'none':
+			default:
+				return '';
+		}
+	}
 </script>
 
 {#if rows.length > 0}
 	<ul class="child-run-chain" role="list" aria-label="Active child run chain">
 		{#each rows as row (row.run.runId)}
+			{@const variant = getStatusVariant(row)}
+			{@const label = variantLabel(variant)}
 			<li>
 				<button
 					type="button"
@@ -54,6 +95,14 @@
 					<span class="child-run-label" title={rowLabel(row.run.title)}>
 						{rowLabel(row.run.title)}
 					</span>
+					{#if variant !== 'none'}
+						<span
+							class="status-dot status-{variant}"
+							role="img"
+							aria-label={label}
+							title={label}
+						></span>
+					{/if}
 				</button>
 			</li>
 		{/each}
@@ -120,5 +169,53 @@
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
+	}
+
+	/* --- Status indicator dot -------------------------------------- */
+	.status-dot {
+		display: inline-block;
+		width: 6px;
+		height: 6px;
+		flex-shrink: 0;
+		border-radius: var(--radius-full);
+		background-color: var(--color-text-muted);
+	}
+
+	.status-running {
+		width: 8px;
+		height: 8px;
+		background-color: var(--color-primary);
+		box-shadow: var(--glow-primary);
+		animation: pulse 1.5s ease-in-out infinite;
+	}
+
+	.status-blocked {
+		background-color: var(--color-warning);
+	}
+
+	.status-error {
+		background-color: var(--color-error);
+	}
+
+	.status-unseen {
+		background-color: var(--color-info);
+	}
+
+	/* Respect reduced-motion: keep the running dot visible but stop
+	   the pulse animation for users who opt out. */
+	@media (prefers-reduced-motion: reduce) {
+		.status-running {
+			animation: none;
+		}
+	}
+
+	@keyframes pulse {
+		0%,
+		100% {
+			opacity: 1;
+		}
+		50% {
+			opacity: 0.35;
+		}
 	}
 </style>

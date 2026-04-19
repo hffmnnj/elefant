@@ -8,7 +8,10 @@ import { describe, expect, it } from 'bun:test';
 import type { AgentRun } from '$lib/types/agent-run.js';
 import {
 	buildChildRunRowIndent,
+	computeRollupVariant,
 	computeSidebarChildRunChain,
+	computeStatusVariant,
+	type SidebarChildRunRow,
 } from './sidebar-child-run-chain-state.js';
 
 const makeRun = (overrides: Partial<AgentRun> = {}): AgentRun => ({
@@ -166,5 +169,146 @@ describe('buildChildRunRowIndent', () => {
 
 	it('truncates fractional depths to an integer', () => {
 		expect(buildChildRunRowIndent(1.7)).toBe('calc(var(--space-4) * 1)');
+	});
+});
+
+describe('computeStatusVariant — per-row indicator logic', () => {
+	it('returns "running" when the run is live', () => {
+		const run = makeRun({ status: 'running' });
+		expect(computeStatusVariant(run, false, false)).toBe('running');
+	});
+
+	it('returns "blocked" when awaiting a question answer', () => {
+		const run = makeRun({ status: 'done' });
+		expect(computeStatusVariant(run, false, true)).toBe('blocked');
+	});
+
+	it('returns "error" on a terminated-with-error run', () => {
+		const run = makeRun({ status: 'error' });
+		expect(computeStatusVariant(run, false, false)).toBe('error');
+	});
+
+	it('returns "unseen" when the run has unseen output and no higher signal', () => {
+		const run = makeRun({ status: 'done' });
+		expect(computeStatusVariant(run, true, false)).toBe('unseen');
+	});
+
+	it('returns "none" for a quiet done run', () => {
+		const run = makeRun({ status: 'done' });
+		expect(computeStatusVariant(run, false, false)).toBe('none');
+	});
+
+	it('returns "none" for a cancelled run with no other signal', () => {
+		const run = makeRun({ status: 'cancelled' });
+		expect(computeStatusVariant(run, false, false)).toBe('none');
+	});
+});
+
+describe('computeStatusVariant — priority order', () => {
+	it('running outranks blocked, error, and unseen', () => {
+		const run = makeRun({ status: 'running' });
+		// Even with blocked + unseen both set, running dominates.
+		expect(computeStatusVariant(run, true, true)).toBe('running');
+	});
+
+	it('blocked outranks error and unseen (non-running run)', () => {
+		const run = makeRun({ status: 'error' });
+		// Error on status + awaiting question + unseen → blocked wins.
+		expect(computeStatusVariant(run, true, true)).toBe('blocked');
+	});
+
+	it('error outranks unseen when not running and not blocked', () => {
+		const run = makeRun({ status: 'error' });
+		expect(computeStatusVariant(run, true, false)).toBe('error');
+	});
+
+	it('unseen beats none when the run is otherwise quiet', () => {
+		const run = makeRun({ status: 'done' });
+		expect(computeStatusVariant(run, true, false)).toBe('unseen');
+	});
+});
+
+describe('computeRollupVariant — session-row aggregate', () => {
+	const rowFor = (run: AgentRun, depth = 1): SidebarChildRunRow => ({
+		run,
+		depth,
+	});
+
+	it('returns "none" for an empty chain', () => {
+		const variant = computeRollupVariant(
+			[],
+			() => false,
+			() => false,
+		);
+		expect(variant).toBe('none');
+	});
+
+	it('returns "none" when every row is quiet', () => {
+		const rows = [
+			rowFor(makeRun({ runId: 'a', status: 'done' })),
+			rowFor(makeRun({ runId: 'b', status: 'cancelled' })),
+		];
+		const variant = computeRollupVariant(
+			rows,
+			() => false,
+			() => false,
+		);
+		expect(variant).toBe('none');
+	});
+
+	it('picks "running" when any row is running (highest priority)', () => {
+		const rows = [
+			rowFor(makeRun({ runId: 'a', status: 'done' })),
+			rowFor(makeRun({ runId: 'b', status: 'running' })),
+			rowFor(makeRun({ runId: 'c', status: 'error' })),
+		];
+		const variant = computeRollupVariant(
+			rows,
+			() => false,
+			() => false,
+		);
+		expect(variant).toBe('running');
+	});
+
+	it('picks "blocked" when no row is running but one is awaiting a question', () => {
+		const rows = [
+			rowFor(makeRun({ runId: 'a', status: 'done' })),
+			rowFor(makeRun({ runId: 'b', status: 'error' })),
+		];
+		const awaiting = new Set(['a']);
+		const variant = computeRollupVariant(
+			rows,
+			() => false,
+			(id) => awaiting.has(id),
+		);
+		expect(variant).toBe('blocked');
+	});
+
+	it('picks "error" over "unseen" when both are present and no higher signal', () => {
+		const rows = [
+			rowFor(makeRun({ runId: 'a', status: 'error' })),
+			rowFor(makeRun({ runId: 'b', status: 'done' })),
+		];
+		const unseen = new Set(['b']);
+		const variant = computeRollupVariant(
+			rows,
+			(id) => unseen.has(id),
+			() => false,
+		);
+		expect(variant).toBe('error');
+	});
+
+	it('picks "unseen" as the softest non-none rollup signal', () => {
+		const rows = [
+			rowFor(makeRun({ runId: 'a', status: 'done' })),
+			rowFor(makeRun({ runId: 'b', status: 'done' })),
+		];
+		const unseen = new Set(['b']);
+		const variant = computeRollupVariant(
+			rows,
+			(id) => unseen.has(id),
+			() => false,
+		);
+		expect(variant).toBe('unseen');
 	});
 });
