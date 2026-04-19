@@ -69,6 +69,7 @@ export interface AgentRunStatusChangedData {
 	sessionId: string
 	projectId: string
 	parentRunId?: string
+	agentType: string
 	title: string
 	previousStatus: AgentRunStatus
 	nextStatus: AgentRunStatus

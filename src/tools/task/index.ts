@@ -4,7 +4,7 @@ import type { HookRegistry } from '../../hooks/index.js'
 import type { ProviderRouter } from '../../providers/router.js'
 import { buildInitialMessages } from '../../runs/context.js'
 import { createRun, markRunEnded } from '../../runs/dal.js'
-import { publishRunEvent } from '../../runs/events.js'
+import { publishRunEvent, publishStatusChange } from '../../runs/events.js'
 import type { RunRegistry } from '../../runs/registry.js'
 import type { RunContext } from '../../runs/types.js'
 import { runAgentLoop } from '../../server/agent-loop.js'
@@ -236,10 +236,35 @@ Depth and concurrency limits are enforced by agent configuration.`,
 						// Intentionally drain events; runAgentLoop publishes via SSE internally.
 					}
 					publishRunEvent(childCtx, sseManager, 'agent_run.done', { runId: childRunId })
+
+					// Emit status change: running -> done
+					publishStatusChange(sseManager, {
+						runId: childRunId,
+						sessionId: currentRun.sessionId,
+						projectId: currentRun.projectId,
+						parentRunId: currentRun.runId,
+						agentType: params.agent_type,
+						title: params.description,
+						previousStatus: 'running',
+						nextStatus: 'done',
+					})
 				} catch (e) {
 					endStatus = 'error'
 					errorMessage = e instanceof Error ? e.message : String(e)
 					publishRunEvent(childCtx, sseManager, 'agent_run.error', { runId: childRunId, message: errorMessage })
+
+					// Emit status change: running -> error
+					publishStatusChange(sseManager, {
+						runId: childRunId,
+						sessionId: currentRun.sessionId,
+						projectId: currentRun.projectId,
+						parentRunId: currentRun.runId,
+						agentType: params.agent_type,
+						title: params.description,
+						previousStatus: 'running',
+						nextStatus: 'error',
+						reason: errorMessage,
+					})
 				} finally {
 					markRunEnded(database, childRunId, endStatus, errorMessage)
 					runRegistry.forgetRun(childRunId)

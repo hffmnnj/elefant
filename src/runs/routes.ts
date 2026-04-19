@@ -11,7 +11,7 @@ import { createToolRegistryForRun, type ToolRegistry } from '../tools/registry.t
 import type { SseManager } from '../transport/sse-manager.ts'
 import { createRun, getRun, listChildRunsByParent, listRunsBySession, markRunEnded } from './dal.ts'
 import { buildInitialMessages } from './context.ts'
-import { publishRunEvent } from './events.ts'
+import { publishRunEvent, publishStatusChange } from './events.ts'
 import type { RunRegistry } from './registry.ts'
 import type { RunContext } from './types.ts'
 
@@ -365,21 +365,36 @@ export function mountAgentRunRoutes(
 		}
 
 		if (deps.sseManager) {
+			const runContextForCancel = {
+				runId: cancelled.data.run_id,
+				parentRunId: cancelled.data.parent_run_id ?? undefined,
+				agentType: cancelled.data.agent_type,
+				title: cancelled.data.title,
+				sessionId: cancelled.data.session_id,
+				projectId: cancelled.data.project_id,
+				signal: new AbortController().signal,
+				depth: 0,
+			}
+
 			publishRunEvent(
-				{
-					runId: cancelled.data.run_id,
-					parentRunId: cancelled.data.parent_run_id ?? undefined,
-					agentType: cancelled.data.agent_type,
-					title: cancelled.data.title,
-					sessionId: cancelled.data.session_id,
-					projectId: cancelled.data.project_id,
-					signal: new AbortController().signal,
-					depth: 0,
-				},
+				runContextForCancel,
 				deps.sseManager,
 				'agent_run.cancelled',
 				{ reason: 'cancel endpoint called' },
 			)
+
+			// Emit status change: running -> cancelled
+			publishStatusChange(deps.sseManager, {
+				runId: cancelled.data.run_id,
+				sessionId: cancelled.data.session_id,
+				projectId: cancelled.data.project_id,
+				parentRunId: cancelled.data.parent_run_id ?? undefined,
+				agentType: cancelled.data.agent_type,
+				title: cancelled.data.title,
+				previousStatus: 'running',
+				nextStatus: 'cancelled',
+				reason: 'cancel endpoint called',
+			})
 		}
 
 		return {

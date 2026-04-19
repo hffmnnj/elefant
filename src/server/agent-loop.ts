@@ -3,7 +3,7 @@ import type { CompactionManager } from '../compaction/manager.ts'
 import type { PermissionGate } from '../permissions/gate.ts'
 import type { ProviderRouter } from '../providers/router.ts'
 import type { StreamEvent } from '../providers/types.ts'
-import { clearRunEventSequence, publishRunEvent } from '../runs/events.ts'
+import { clearRunEventSequence, publishRunEvent, publishStatusChange } from '../runs/events.ts'
 import type { RunContext } from '../runs/types.ts'
 import { createQuestionEmitter, type QuestionEmitter } from '../tools/question/emitter.ts'
 import type { ElefantError } from '../types/errors.ts'
@@ -208,6 +208,22 @@ export async function* runAgentLoop(
 				emitRunEvent('agent_run.done', {
 					finishReason: event.finishReason,
 				})
+
+				// Emit status change: running -> done
+				if (options.sseManager) {
+					publishStatusChange(options.sseManager, {
+						runId: options.runContext.runId,
+						sessionId: options.runContext.sessionId,
+						projectId: options.runContext.projectId,
+						parentRunId: options.runContext.parentRunId,
+						agentType: options.runContext.agentType,
+						title: options.runContext.title,
+						previousStatus: 'running',
+						nextStatus: 'done',
+						reason: `finishReason: ${event.finishReason}`,
+					})
+				}
+
 				finishReason = event.finishReason
 				if (event.finishReason !== 'tool_calls') {
 					clearRunEventSequence(options.runContext.runId)
@@ -222,6 +238,22 @@ export async function* runAgentLoop(
 					message: event.error.message,
 					details: event.error.details,
 				})
+
+				// Emit status change: running -> error
+				if (options.sseManager) {
+					publishStatusChange(options.sseManager, {
+						runId: options.runContext.runId,
+						sessionId: options.runContext.sessionId,
+						projectId: options.runContext.projectId,
+						parentRunId: options.runContext.parentRunId,
+						agentType: options.runContext.agentType,
+						title: options.runContext.title,
+						previousStatus: 'running',
+						nextStatus: 'error',
+						reason: event.error.message,
+					})
+				}
+
 				clearRunEventSequence(options.runContext.runId)
 				yield event
 				return
