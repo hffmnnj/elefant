@@ -217,6 +217,49 @@ export function applyRunEvent(envelope: AgentRunEventEnvelope): void {
 			appendToTranscript(runId, { kind: 'terminal', status: 'cancelled', message: reason, seq });
 			break;
 		}
+		case 'agent_run.status_changed': {
+			// Parse status change data with safe fallbacks
+			const nextStatus = (data.nextStatus as AgentRun['status']) ?? 'running';
+			const previousStatus = (data.previousStatus as AgentRun['status']) ?? 'running';
+
+			// Idempotent: if status already matches nextStatus, no-op
+			const existing = runs[runId];
+			if (existing && existing.status === nextStatus) {
+				break;
+			}
+
+			// If run doesn't exist yet, create a minimal entry
+			// (handles case where status_changed arrives before spawned event)
+			if (!existing) {
+				upsertRun({
+					runId,
+					sessionId: envelope.sessionId,
+					projectId: envelope.projectId,
+					parentRunId: envelope.parentRunId,
+					agentType: envelope.agentType,
+					title: envelope.title,
+					status: nextStatus,
+					contextMode: 'none',
+					createdAt: envelope.ts,
+					startedAt: previousStatus === 'running' ? envelope.ts : null,
+					endedAt: ['done', 'error', 'cancelled'].includes(nextStatus) ? envelope.ts : null,
+					errorMessage: null,
+				});
+			} else {
+				// Update existing run status
+				runs = {
+					...runs,
+					[runId]: {
+						...existing,
+						status: nextStatus,
+						startedAt: existing.startedAt ?? (nextStatus === 'running' ? envelope.ts : null),
+						endedAt: existing.endedAt ?? (['done', 'error', 'cancelled'].includes(nextStatus) ? envelope.ts : null),
+					},
+				};
+			}
+			// Note: NO transcript entry appended — status_changed is metadata only
+			break;
+		}
 		default:
 			// Unknown agent_run.* type — ignore gracefully.
 			break;

@@ -196,6 +196,119 @@ describe('agentRunsStore', () => {
 			);
 			expect(agentRunsStore.transcripts['run-a']).toBeUndefined();
 		});
+
+		describe('agent_run.status_changed', () => {
+			it('status_changed(running → done) updates status field', () => {
+				_seedRun(makeRun({ runId: 'run-a', status: 'running' }));
+
+				agentRunsStore.applyRunEvent(
+					makeEnvelope({
+						runId: 'run-a',
+						type: 'agent_run.status_changed',
+						seq: 10,
+						data: { previousStatus: 'running', nextStatus: 'done' },
+					}),
+				);
+
+				expect(agentRunsStore.runs['run-a'].status).toBe('done');
+			});
+
+			it('does NOT append a transcript entry for status_changed', () => {
+				_seedRun(makeRun({ runId: 'run-a', status: 'running' }));
+
+				agentRunsStore.applyRunEvent(
+					makeEnvelope({
+						runId: 'run-a',
+						type: 'agent_run.status_changed',
+						seq: 10,
+						data: { previousStatus: 'running', nextStatus: 'done' },
+					}),
+				);
+
+				expect(agentRunsStore.transcripts['run-a']).toBeUndefined();
+			});
+
+			it('is idempotent — delivering same event twice produces same result', () => {
+				_seedRun(makeRun({ runId: 'run-a', status: 'running' }));
+
+				const envelope = makeEnvelope({
+					runId: 'run-a',
+					type: 'agent_run.status_changed',
+					seq: 10,
+					data: { previousStatus: 'running', nextStatus: 'done' },
+				});
+
+				agentRunsStore.applyRunEvent(envelope);
+				const firstEndedAt = agentRunsStore.runs['run-a'].endedAt;
+
+				agentRunsStore.applyRunEvent(envelope);
+				const secondEndedAt = agentRunsStore.runs['run-a'].endedAt;
+
+				expect(agentRunsStore.runs['run-a'].status).toBe('done');
+				expect(firstEndedAt).toBe(secondEndedAt);
+			});
+
+			it('upserts a minimal run entry for unknown runId instead of crashing', () => {
+				expect(agentRunsStore.runs['run-unknown']).toBeUndefined();
+
+				agentRunsStore.applyRunEvent(
+					makeEnvelope({
+						runId: 'run-unknown',
+						sessionId: 'sess-new',
+						projectId: 'proj-new',
+						parentRunId: 'parent-1',
+						agentType: 'executor',
+						title: 'Unknown Run',
+						type: 'agent_run.status_changed',
+						seq: 1,
+						data: { previousStatus: 'running', nextStatus: 'done' },
+					}),
+				);
+
+				expect(agentRunsStore.runs['run-unknown']).toBeDefined();
+				expect(agentRunsStore.runs['run-unknown'].status).toBe('done');
+				expect(agentRunsStore.runs['run-unknown'].sessionId).toBe('sess-new');
+				expect(agentRunsStore.runs['run-unknown'].projectId).toBe('proj-new');
+				expect(agentRunsStore.runs['run-unknown'].parentRunId).toBe('parent-1');
+				expect(agentRunsStore.runs['run-unknown'].agentType).toBe('executor');
+				expect(agentRunsStore.runs['run-unknown'].title).toBe('Unknown Run');
+			});
+
+			it('handles status_changed for all terminal states', () => {
+				_seedRun(makeRun({ runId: 'run-done', status: 'running' }));
+				_seedRun(makeRun({ runId: 'run-error', status: 'running' }));
+				_seedRun(makeRun({ runId: 'run-cancelled', status: 'running' }));
+
+				agentRunsStore.applyRunEvent(
+					makeEnvelope({
+						runId: 'run-done',
+						type: 'agent_run.status_changed',
+						seq: 1,
+						data: { previousStatus: 'running', nextStatus: 'done' },
+					}),
+				);
+				agentRunsStore.applyRunEvent(
+					makeEnvelope({
+						runId: 'run-error',
+						type: 'agent_run.status_changed',
+						seq: 1,
+						data: { previousStatus: 'running', nextStatus: 'error' },
+					}),
+				);
+				agentRunsStore.applyRunEvent(
+					makeEnvelope({
+						runId: 'run-cancelled',
+						type: 'agent_run.status_changed',
+						seq: 1,
+						data: { previousStatus: 'running', nextStatus: 'cancelled' },
+					}),
+				);
+
+				expect(agentRunsStore.runs['run-done'].status).toBe('done');
+				expect(agentRunsStore.runs['run-error'].status).toBe('error');
+				expect(agentRunsStore.runs['run-cancelled'].status).toBe('cancelled');
+			});
+		});
 	});
 
 	describe('runsForSession', () => {
