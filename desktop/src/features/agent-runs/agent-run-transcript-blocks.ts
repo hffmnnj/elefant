@@ -19,6 +19,7 @@
 //   • `question` and `terminal` events produce their own blocks.
 
 import type {
+	AgentRun,
 	AgentRunStatus,
 	AgentRunTranscriptEntry,
 } from '$lib/types/agent-run.js';
@@ -49,6 +50,25 @@ export type RenderBlock =
 	| { kind: 'terminal'; id: string; status: AgentRunStatus; message: string };
 
 /**
+ * Options controlling runId resolution for `task` tool calls.
+ *
+ * `childRuns` is the current list of direct children of the parent run
+ * (i.e. what `agentRunsStore.childRunsForRun(parentRunId)` returns).
+ * Passing it in — rather than importing the store — keeps this module
+ * pure and easy to unit-test, and lets the component wrap the call in a
+ * `$derived` so resolution updates reactively whenever
+ * `agent_run.spawned` arrives and a new child lands in the store.
+ *
+ * Resolution priority for each task block:
+ *   1. `tool_call.metadata.runId` (carried by `agent_run.tool_call_metadata`)
+ *   2. child run whose `title` matches `arguments.description`
+ *   3. `null` — spawning (AgentTaskCard renders the disabled state)
+ */
+export interface ComputeRenderBlocksOptions {
+	childRuns?: AgentRun[];
+}
+
+/**
  * Compute the ordered list of render blocks for a transcript.
  *
  * `task` tool calls are dispatched to a `task` block and their
@@ -57,7 +77,9 @@ export type RenderBlock =
  */
 export function computeRenderBlocks(
 	source: AgentRunTranscriptEntry[],
+	options: ComputeRenderBlocksOptions = {},
 ): RenderBlock[] {
+	const childRuns = options.childRuns ?? [];
 	const out: RenderBlock[] = [];
 	const toolCallsById = new Map<string, ToolCallDisplay>();
 	// Track task tool_call_ids so we can suppress their tool_result.
@@ -92,8 +114,6 @@ export function computeRenderBlocks(
 				flushText();
 				if (entry.name === 'task') {
 					// Dedicated task render block — AgentTaskCard consumes this.
-					// `resolvedRunId` stays null here; wave 5.3 will populate it
-					// from metadata + childRunsForRun fallback resolution.
 					const title =
 						typeof entry.arguments.description === 'string'
 							? entry.arguments.description
@@ -103,13 +123,29 @@ export function computeRenderBlocks(
 							? entry.arguments.agent_type
 							: 'agent';
 					taskToolCallIds.add(entry.id);
+
+					// Three-tier runId resolution:
+					//   1. Metadata attached by agent_run.tool_call_metadata
+					//      (T3.3 merges this onto the tool_call entry).
+					//   2. Title-match against known child runs (fallback when
+					//      metadata arrives after render or is missing).
+					//   3. null — the child hasn't spawned yet; AgentTaskCard
+					//      renders the disabled "spawning…" state.
+					let resolvedRunId: string | null = null;
+					if (entry.metadata?.runId) {
+						resolvedRunId = entry.metadata.runId;
+					} else if (title !== '') {
+						const match = childRuns.find((r) => r.title === title);
+						if (match) resolvedRunId = match.runId;
+					}
+
 					out.push({
 						kind: 'task',
 						id: `task-${entry.id}`,
 						title,
 						agentType,
 						toolCallId: entry.id,
-						resolvedRunId: null,
+						resolvedRunId,
 					});
 				} else {
 					const display: ToolCallDisplay = {

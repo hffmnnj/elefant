@@ -33,7 +33,18 @@
 		effectiveRunId ? agentRunsStore.transcripts[effectiveRunId] ?? [] : [],
 	);
 
-	const renderBlocks = $derived(computeRenderBlocks(entries));
+	// Direct children of the active run. Used as the fallback source for
+	// task block runId resolution: when a `task` tool_call has no
+	// metadata.runId yet, we match by title against these children.
+	// Derived off the store so resolution updates reactively whenever
+	// `agent_run.spawned` lands a new child.
+	const childRuns = $derived(
+		effectiveRunId ? agentRunsStore.childRunsForRun(effectiveRunId) : [],
+	);
+
+	const renderBlocks = $derived(
+		computeRenderBlocks(entries, { childRuns }),
+	);
 
 	/**
 	 * Open a child run spawned via the `task` tool.
