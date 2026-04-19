@@ -1,12 +1,14 @@
 /* =========================================
    TYPOGRAPHY SYSTEM
-   Geist Sans + Geist Mono
+   Instrument Serif (display/headings) + DM Sans (body/UI) + Geist Mono (code)
+   Editorial typographic contrast — premium two-family system
    ========================================= */
 
 :root {
 	/* Font families */
-	--font-sans: "Geist Sans", "Geist", system-ui, -apple-system,
-		BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+	--font-serif: "Instrument Serif", "Georgia", serif;
+	--font-sans: "DM Sans", system-ui, -apple-system, BlinkMacSystemFont,
+		"Segoe UI", Roboto, sans-serif;
 	--font-mono: "Geist Mono", "JetBrains Mono", "Fira Code", "SF Mono",
 		"Cascadia Code", monospace;
 
@@ -36,7 +38,7 @@
 	--line-height-relaxed: 1.6;
 	--line-height-loose: 1.8;
 
-	/* Leading tokens (alternative naming) */
+	/* Leading tokens */
 	--leading-tight: 1.25;
 	--leading-snug: 1.375;
 	--leading-normal: 1.5;
@@ -64,6 +66,27 @@ body {
 	-webkit-font-smoothing: antialiased;
 	-moz-osx-font-smoothing: grayscale;
 	text-rendering: optimizeLegibility;
+}
+
+/* Heading defaults — Instrument Serif for editorial premium feel */
+h1,
+h2,
+h3 {
+	font-family: var(--font-serif);
+	font-weight: var(--font-weight-normal);
+	line-height: var(--line-height-tight);
+	letter-spacing: var(--tracking-snug);
+	color: var(--color-text-primary);
+}
+
+h4,
+h5,
+h6 {
+	font-family: var(--font-sans);
+	font-weight: var(--font-weight-semibold);
+	line-height: var(--line-height-snug);
+	letter-spacing: var(--tracking-normal);
+	color: var(--color-text-primary);
 }
 
 code,
@@ -101,6 +124,39 @@ body {
 }
 
 /* =========================================
+   HEADING UTILITY CLASSES
+   Editorial serif typographic scale
+   ========================================= */
+
+/* Display heading — largest, italic, for hero/brand moments */
+.heading-display {
+	font-family: var(--font-serif);
+	font-size: var(--font-size-4xl);
+	font-weight: var(--font-weight-normal);
+	font-style: italic;
+	line-height: var(--line-height-tight);
+	letter-spacing: var(--tracking-tight);
+}
+
+/* Large heading — major section titles */
+.heading-lg {
+	font-family: var(--font-serif);
+	font-size: var(--font-size-3xl);
+	font-weight: var(--font-weight-normal);
+	line-height: var(--line-height-snug);
+	letter-spacing: var(--tracking-snug);
+}
+
+/* Medium heading — subsection headings */
+.heading-md {
+	font-family: var(--font-serif);
+	font-size: var(--font-size-2xl);
+	font-weight: var(--font-weight-normal);
+	line-height: var(--line-height-snug);
+	letter-spacing: var(--tracking-normal);
+}
+
+/* =========================================
    TYPOGRAPHY UTILITY CLASSES
    ========================================= */
 
@@ -122,6 +178,11 @@ body {
 .font-medium { font-weight: 500; }
 .font-semibold { font-weight: 600; }
 .font-bold { font-weight: 700; }
+
+/* Family utilities */
+.font-serif { font-family: var(--font-serif); }
+.font-sans { font-family: var(--font-sans); }
+.font-mono { font-family: var(--font-mono); }
 
 /* Tracking utilities */
 .tracking-tight { letter-spacing: var(--tracking-tight); }
