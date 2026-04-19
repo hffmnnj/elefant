@@ -3,12 +3,14 @@ import type { CompactionManager } from '../compaction/manager.ts'
 import type { PermissionGate } from '../permissions/gate.ts'
 import type { ProviderRouter } from '../providers/router.ts'
 import type { StreamEvent } from '../providers/types.ts'
+import { clearRunEventSequence, publishRunEvent } from '../runs/events.ts'
 import type { RunContext } from '../runs/types.ts'
 import { createQuestionEmitter, type QuestionEmitter } from '../tools/question/emitter.ts'
 import type { ElefantError } from '../types/errors.ts'
 import { type Message } from '../types/providers.ts'
 import type { Result } from '../types/result.ts'
 import type { ToolCall, ToolDefinition, ToolResult } from '../types/tools.ts'
+import type { SseManager } from '../transport/sse-manager.ts'
 
 export interface ToolExecutor {
 	execute(name: string, args: unknown): Promise<Result<string, ElefantError>>
@@ -30,6 +32,7 @@ export interface AgentLoopOptions {
 	compaction?: CompactionManager
 	runContext: RunContext
 	questionEmitter?: QuestionEmitter
+	sseManager?: SseManager
 }
 
 function estimateTokenCount(messages: Message[]): number {
@@ -80,12 +83,39 @@ export async function* runAgentLoop(
 	const contextWindow = options.contextWindowTokens ?? 200_000
 	const sessionId = options.runContext.sessionId
 	const maxIterations = options.maxIterations ?? 50
+	const emitRunEvent = (type: string, data: unknown): void => {
+		if (!options.sseManager) {
+			return
+		}
+
+		publishRunEvent(options.runContext, options.sseManager, type, data)
+	}
+	const baseQuestionEmitter = options.questionEmitter ?? (() => undefined)
+	const questionEmitter: QuestionEmitter = (payload) => {
+		emitRunEvent('agent_run.question', payload)
+		baseQuestionEmitter(payload)
+	}
 	const runQuestionEmitter = createQuestionEmitter(
 		options.runContext.runId,
-		options.questionEmitter ?? (() => undefined),
+		questionEmitter,
 	)
 
+	emitRunEvent('agent_run.spawned', {
+		runId: options.runContext.runId,
+		parentRunId: options.runContext.parentRunId ?? null,
+		agentType: options.runContext.agentType,
+		title: options.runContext.title,
+	})
+
 	while (iterations < maxIterations) {
+		if (options.runContext.signal.aborted) {
+			emitRunEvent('agent_run.cancelled', {
+				reason: 'run aborted before provider call',
+			})
+			clearRunEventSequence(options.runContext.runId)
+			return
+		}
+
 		iterations += 1
 		const messageStart = Date.now()
 
@@ -149,26 +179,50 @@ export async function* runAgentLoop(
 			topP: options.topP,
 			timeoutMs: options.timeoutMs,
 		})) {
+			if (options.runContext.signal.aborted) {
+				emitRunEvent('agent_run.cancelled', {
+					reason: 'run aborted during provider stream',
+				})
+				clearRunEventSequence(options.runContext.runId)
+				return
+			}
+
 			if (event.type === 'tool_call_complete') {
+				emitRunEvent('agent_run.tool_call', {
+					toolCall: event.toolCall,
+				})
 				pendingToolCalls.push(event.toolCall)
 				continue
 			}
 
 			if (event.type === 'text_delta') {
+				emitRunEvent('agent_run.token', {
+					text: event.text,
+				})
 				assistantText += event.text
 				yield event
 				continue
 			}
 
 			if (event.type === 'done') {
+				emitRunEvent('agent_run.done', {
+					finishReason: event.finishReason,
+				})
 				finishReason = event.finishReason
 				if (event.finishReason !== 'tool_calls') {
+					clearRunEventSequence(options.runContext.runId)
 					yield event
 				}
 				continue
 			}
 
 			if (event.type === 'error') {
+				emitRunEvent('agent_run.error', {
+					code: event.error.code,
+					message: event.error.message,
+					details: event.error.details,
+				})
+				clearRunEventSequence(options.runContext.runId)
 				yield event
 				return
 			}
@@ -246,6 +300,9 @@ export async function* runAgentLoop(
 				executeResult.ok ? executeResult.data : executeResult.error.message,
 				!executeResult.ok,
 			)
+			emitRunEvent('agent_run.tool_result', {
+				toolResult,
+			})
 
 			yield {
 				type: 'tool_result',
@@ -268,4 +325,9 @@ export async function* runAgentLoop(
 			message: 'Max iterations reached',
 		},
 	}
+	emitRunEvent('agent_run.error', {
+		code: 'TOOL_EXECUTION_FAILED',
+		message: 'Max iterations reached',
+	})
+	clearRunEventSequence(options.runContext.runId)
 }
