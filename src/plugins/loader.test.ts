@@ -5,6 +5,7 @@ import { join } from 'node:path';
 
 import type { ElefantConfig } from '../config/schema.ts';
 import { Database } from '../db/database.ts';
+import { emit } from '../hooks/emit.ts';
 import { HookRegistry } from '../hooks/registry.ts';
 import { dbPath, elefantDir, statePath } from '../project/paths.ts';
 import type { ProjectInfo } from '../project/types.ts';
@@ -116,6 +117,65 @@ describe('PluginLoader', () => {
 		await context.plugins.loadAll();
 		expect(process.env.ELEFANT_PLUGIN_LOADER_FLAG).toBe('loaded');
 		expect(process.env.ELEFANT_PLUGIN_LOADS).toBe('1');
+
+		await context.plugins.unloadAll();
+		context.db.close();
+	});
+
+	it('registers permission:ask and system:transform hook handlers', async () => {
+		const projectPath = makeTempProject('elefant-plugin-hooks-');
+		const context = createMockContext(projectPath);
+		const pluginsDir = join(context.project.elefantDir, 'plugins', 'hook-test-plugin');
+		mkdirSync(pluginsDir, { recursive: true });
+
+		const entrypoint = join(pluginsDir, 'index.ts');
+		writeFileSync(
+			entrypoint,
+			[
+				'export default async function plugin(api) {',
+				"  api.on('permission:ask', (ctx) => {",
+				"    process.env.ELEFANT_PERMISSION_ASK_FIRED = 'true';",
+				"    process.env.ELEFANT_PERMISSION_ASK_TOOL = ctx.tool;",
+				"    return { status: 'allow', reason: 'test' };",
+				'  });',
+				"  api.on('system:transform', (ctx) => {",
+				"    process.env.ELEFANT_SYSTEM_TRANSFORM_FIRED = 'true';",
+				"    process.env.ELEFANT_SYSTEM_TRANSFORM_SESSION = ctx.sessionId;",
+				"    return { messages: ctx.messages };",
+				'  });',
+				'}',
+			].join('\n'),
+			'utf-8',
+		);
+
+		await context.plugins.loadAll();
+
+		// Verify hooks are registered by emitting them
+		const permissionResult = await emit(context.hooks, 'permission:ask', {
+			tool: 'test-tool',
+			args: {},
+			conversationId: 'test-conv',
+			sessionId: 'test-session',
+			projectId: 'test-project',
+			agent: 'test-agent',
+			risk: 'low',
+		});
+
+		expect(process.env.ELEFANT_PERMISSION_ASK_FIRED).toBe('true');
+		expect(process.env.ELEFANT_PERMISSION_ASK_TOOL).toBe('test-tool');
+		expect(permissionResult).toBeDefined();
+
+		const transformResult = await emit(context.hooks, 'system:transform', {
+			messages: [{ role: 'user', content: 'hello' }],
+			sessionId: 'test-session',
+			conversationId: 'test-conv',
+			state: {},
+			budgets: { tokens: 1000 },
+		});
+
+		expect(process.env.ELEFANT_SYSTEM_TRANSFORM_FIRED).toBe('true');
+		expect(process.env.ELEFANT_SYSTEM_TRANSFORM_SESSION).toBe('test-session');
+		expect(transformResult).toBeDefined();
 
 		await context.plugins.unloadAll();
 		context.db.close();

@@ -1,5 +1,9 @@
 import type { Message } from '../types/providers.ts';
 import type { ToolResult } from '../types/tools.ts';
+import type {
+	PermissionDecisionStatus,
+	Risk,
+} from '../permissions/types.ts';
 
 export interface ToolBeforeContext {
 	readonly toolName: string;
@@ -19,6 +23,9 @@ export interface MessageBeforeContext {
 	readonly messages: readonly Message[];
 	readonly provider: string;
 	readonly model: string;
+	readonly runId?: string;
+	readonly sessionId?: string;
+	readonly projectId?: string;
 }
 
 export interface MessageAfterContext {
@@ -26,6 +33,9 @@ export interface MessageAfterContext {
 	readonly provider: string;
 	readonly model: string;
 	readonly durationMs: number;
+	readonly runId?: string;
+	readonly sessionId?: string;
+	readonly projectId?: string;
 }
 
 export interface StreamStartContext {
@@ -82,11 +92,28 @@ export interface HookContextMap {
 		readonly sessionId: string;
 		readonly phase?: string;
 	};
+	'system:transform': {
+		readonly messages: Message[];
+		readonly sessionId: string;
+		readonly conversationId: string;
+		readonly runId?: string;
+		readonly projectId?: string;
+		readonly state: unknown;
+		readonly budgets: {
+			readonly tokens: number;
+		};
+	};
 	'permission:ask': {
 		readonly tool: string;
 		readonly args: Readonly<Record<string, unknown>>;
 		readonly conversationId: string;
-		readonly risk: 'low' | 'medium' | 'high';
+		readonly sessionId?: string;
+		readonly projectId?: string;
+		readonly agent?: string;
+		readonly risk: Risk;
+		readonly classification?: Risk;
+		readonly status?: PermissionDecisionStatus;
+		readonly reason?: string;
 	};
 	'tool:block': {
 		readonly tool: string;
@@ -123,6 +150,7 @@ export const HOOK_EVENT_NAMES: readonly HookEventName[] = [
 	'session:end',
 	'session:compact',
 	'context:transform',
+	'system:transform',
 	'permission:ask',
 	'tool:block',
 	'tool:allow',

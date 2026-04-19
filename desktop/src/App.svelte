@@ -23,6 +23,9 @@
 	import AboutView from "./features/about/AboutView.svelte";
 	import OnboardingView from "./features/onboarding/OnboardingView.svelte";
 	import ProjectPickerView from "./features/projects/ProjectPickerView.svelte";
+	import AgentProfilesView from "./features/agent-config/AgentProfilesView.svelte";
+	import AgentRunTabs from "./features/agent-runs/AgentRunTabs.svelte";
+	import WorktreeListPanel from "./features/worktrees/WorktreeListPanel.svelte";
 
 	type NavigationRuntime = typeof navigationStore & {
 		initNavigation: (opts: { getActiveProjectId: () => string | null }) => void;
@@ -210,6 +213,12 @@
 		<ModelsView />
 	{:else if currentView === "about"}
 		<AboutView />
+	{:else if currentView === "agent-config"}
+		<AgentProfilesView />
+	{:else if currentView === "agent-runs"}
+		<AgentRunTabs />
+	{:else if currentView === "worktrees"}
+		<WorktreeListPanel />
 	{:else}
 		<div class="unknown-view">
 			Unknown view: {currentView}

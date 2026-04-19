@@ -6,10 +6,15 @@ import type { ToolRegistry } from '../tools/registry.ts'
 import type { ElefantWsServer } from '../transport/ws-server.ts'
 import type { SseManager } from '../transport/sse-manager.ts'
 import type { Database } from '../db/database.ts'
+import { ConfigManager } from '../config/index.ts'
 import { registerServerRoutes } from './routes.ts'
 import { registerQuestionRoute } from '../tools/question/route.ts'
 import { mountWsRoute } from './routes-ws.ts'
 import { mountProjectEventsRoute, mountProjectsRoutes } from './routes-projects.ts'
+import { RunRegistry } from '../runs/registry.ts'
+import { mountAgentRunRoutes } from '../runs/routes.ts'
+import { mountWorktreeRoutes } from '../worktree/routes.ts'
+import { createConfigRoutes } from './config-routes.ts'
 
 export function createApp(
 	providerRouter: ProviderRouter,
@@ -75,7 +80,24 @@ export function createApp(
 	// Register question tool route for HITL interactions
 	registerQuestionRoute(app as unknown as Elysia)
 
-	const baseApp = registerServerRoutes(app as unknown as Elysia, providerRouter, toolRegistry, hookRegistry)
+	// Create shared run infrastructure before routes so /api/chat
+	// and /api/projects/.../agent-runs share the same registry + config.
+	const runRegistry = new RunRegistry()
+	const configManager = new ConfigManager()
+
+	const baseApp = registerServerRoutes(
+		app as unknown as Elysia,
+		providerRouter,
+		toolRegistry,
+		hookRegistry,
+		db,
+		{
+			database: db,
+			runRegistry,
+			sseManager: sse,
+			configManager,
+		},
+	)
 
 	// Mount transport routes when available
 	if (ws) mountWsRoute(baseApp, ws)
@@ -83,6 +105,23 @@ export function createApp(
 
 	// Mount project CRUD routes
 	mountProjectsRoutes(baseApp, db)
+
+	// Mount agent run routes (MH3)
+	mountAgentRunRoutes(baseApp, {
+		db,
+		providerRouter,
+		toolRegistry,
+		hookRegistry,
+		runRegistry,
+		sseManager: sse,
+		configManager,
+	})
+
+	// Mount worktree management routes (MH5)
+	mountWorktreeRoutes(baseApp, { db })
+
+	// Mount agent config routes (MH4)
+	createConfigRoutes(baseApp, providerRouter, configManager)
 
 	return baseApp
 }

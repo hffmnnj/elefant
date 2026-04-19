@@ -67,7 +67,7 @@ function mapErrorToStatus(error: ElefantError): number {
 	return 500;
 }
 
-export function mountProjectsCreateRoute(app: Elysia, db: Database): Elysia {
+export function mountProjectsCreateRoute(app: Elysia, db: Database) {
 	return app.post('/api/projects', async ({ body, set }) => {
 		const parsed = ProjectCreateBodySchema.safeParse(body);
 		if (!parsed.success) {
@@ -129,14 +129,20 @@ export function mountProjectsCreateRoute(app: Elysia, db: Database): Elysia {
 	});
 }
 
-export function mountProjectEventsRoute(app: Elysia, sse: SseManager): Elysia {
-	return app.get('/api/projects/:id/events', ({ params, request }) => {
-		const lastEventId = request.headers.get('Last-Event-ID') ?? undefined;
+export function mountProjectEventsRoute(app: Elysia, sse: SseManager) {
+	return app.get('/api/projects/:id/events', ({ params, request, query }) => {
+		// Prefer the standard header; fall back to the ?lastEventId query
+		// parameter so browser EventSource clients (which cannot set custom
+		// headers) can still resume from a known cursor.
+		const queryLastEventId =
+			typeof query?.lastEventId === 'string' ? query.lastEventId : undefined;
+		const lastEventId =
+			request.headers.get('Last-Event-ID') ?? queryLastEventId ?? undefined;
 		return sse.subscribe(params.id, lastEventId);
 	});
 }
 
-export function mountProjectsListRoute(app: Elysia, db: Database): Elysia {
+export function mountProjectsListRoute(app: Elysia, db: Database) {
 	return app.get('/api/projects', () => {
 		const result = listProjects(db);
 		if (result.ok) {
@@ -151,7 +157,7 @@ const ProjectUpdateBodySchema = z.object({
 	description: z.string().optional(),
 });
 
-export function mountProjectsUpdateRoute(app: Elysia, db: Database): Elysia {
+export function mountProjectsUpdateRoute(app: Elysia, db: Database) {
 	return app.put('/api/projects/:id', ({ params, body, set }) => {
 		const parsed = ProjectUpdateBodySchema.safeParse(body);
 		if (!parsed.success) {
@@ -175,7 +181,7 @@ export function mountProjectsUpdateRoute(app: Elysia, db: Database): Elysia {
 	});
 }
 
-export function mountProjectsDeleteRoute(app: Elysia, db: Database): Elysia {
+export function mountProjectsDeleteRoute(app: Elysia, db: Database) {
 	return app.delete('/api/projects/:id', ({ params, set }) => {
 		const existing = getProjectById(db, params.id);
 		if (!existing.ok) {
@@ -194,7 +200,7 @@ export function mountProjectsDeleteRoute(app: Elysia, db: Database): Elysia {
 	});
 }
 
-export function mountProjectsSessionsRoutes(app: Elysia, db: Database): Elysia {
+export function mountProjectsSessionsRoutes(app: Elysia, db: Database) {
 	return app
 		.get('/api/projects/:id/sessions', ({ params, set }) => {
 			const project = getProjectById(db, params.id);
@@ -244,7 +250,7 @@ export function mountProjectsSessionsRoutes(app: Elysia, db: Database): Elysia {
  * Chains create, list, update, delete, and sessions routes.
  * Note: events route requires SseManager and is mounted separately.
  */
-export function mountProjectsRoutes(app: Elysia, db: Database): Elysia {
+export function mountProjectsRoutes(app: Elysia, db: Database) {
 	mountProjectsCreateRoute(app, db);
 	mountProjectsListRoute(app, db);
 	mountProjectsUpdateRoute(app, db);

@@ -130,7 +130,9 @@ async function loadSessions(projectId: string): Promise<void> {
 				`GET /api/projects/${projectId}/sessions failed: HTTP ${response.status}`
 			);
 		}
-		const data = (await response.json()) as Session[];
+		const json = (await response.json()) as { ok: true; data: Session[] } | Session[];
+		// Routes wrapped in { ok, data } after the project-ui sprint; handle both shapes.
+		const data = Array.isArray(json) ? json : (json as { ok: true; data: Session[] }).data;
 		sessionsByProject = { ...sessionsByProject, [projectId]: data };
 	} catch (err) {
 		setError(err instanceof Error ? err.message : 'Failed to load sessions');
@@ -153,7 +155,9 @@ async function createSession(projectId: string): Promise<Session> {
 				`POST /api/projects/${projectId}/sessions failed: HTTP ${response.status}`
 			);
 		}
-		const created = (await response.json()) as Session;
+		const json = (await response.json()) as { ok: true; data: Session } | Session;
+		// Routes wrapped in { ok, data } after the project-ui sprint; handle both shapes.
+		const created = 'ok' in json && json.ok ? (json as { ok: true; data: Session }).data : (json as Session);
 		const existing = sessionsByProject[projectId] ?? [];
 		sessionsByProject = {
 			...sessionsByProject,

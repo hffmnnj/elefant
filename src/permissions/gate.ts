@@ -1,11 +1,17 @@
 import { insertEvent } from '../db/repo/events.ts';
 import type { DaemonContext } from '../daemon/context.ts';
 import { emit } from '../hooks/emit.ts';
+import type { HookContextMap } from '../hooks/types.ts';
 import type { ElefantWsServer } from '../transport/ws-server.ts';
 import type { ElefantError } from '../types/errors.ts';
 import { err, ok, type Result } from '../types/result.ts';
 import { classify, DEFAULT_CLASSIFIER_RULES } from './classifier.ts';
-import type { ClassifierRule, Decision } from './types.ts';
+import type {
+	ClassifierRule,
+	Decision,
+	PermissionDecisionStatus,
+	Risk,
+} from './types.ts';
 
 export interface PermissionGateOptions {
 	timeoutMs?: number;
@@ -26,6 +32,31 @@ interface ApprovalResponse {
 	reason?: string;
 }
 
+export interface PermissionCheckContext {
+	sessionId?: string;
+	projectId?: string;
+	agent?: string;
+}
+
+interface PermissionAskedEvent {
+	requestId: string;
+	tool: string;
+	classification: Risk;
+	projectId?: string;
+	sessionId?: string;
+	agent?: string;
+	ts: number;
+}
+
+interface PermissionResolvedEvent {
+	requestId: string;
+	status: PermissionDecisionStatus;
+	source: 'hook' | 'user' | 'default';
+	reason?: string;
+	durationMs: number;
+	ts: number;
+}
+
 export class PermissionGate {
 	private readonly timeoutMs: number;
 	private readonly rules: ClassifierRule[];
@@ -44,25 +75,57 @@ export class PermissionGate {
 		tool: string,
 		args: Record<string, unknown>,
 		conversationId: string,
+		context: PermissionCheckContext = {},
 	): Promise<Result<Decision, ElefantError>> {
 		try {
+			const startedAt = Date.now();
+			const requestId = crypto.randomUUID();
 			let risk = classify(tool, args, this.rules);
 
-			const hookCtx = await emit(this.ctx.hooks, 'permission:ask', {
+			this.publishPermissionAskedEvent(context, {
+				requestId,
+				tool,
+				classification: risk,
+				projectId: context.projectId,
+				sessionId: context.sessionId,
+				agent: context.agent,
+				ts: startedAt,
+			});
+
+			const hookCtx = await this.emitPermissionAskHooks({
 				tool,
 				args,
 				conversationId,
+				sessionId: context.sessionId,
+				projectId: context.projectId,
+				agent: context.agent,
 				risk,
 			});
-			risk = hookCtx.risk;
+			risk = hookCtx.classification ?? hookCtx.risk;
+			const hookStatus = hookCtx.status;
 
 			let decision: Decision;
 
-			if (risk === 'low') {
+			if (hookStatus === 'deny') {
+				decision = {
+					approved: false,
+					reason: hookCtx.reason ?? 'denied by permission hook',
+					risk,
+					source: 'hook',
+				};
+			} else if (hookStatus === 'allow') {
+				decision = {
+					approved: true,
+					reason: hookCtx.reason ?? 'approved by permission hook',
+					risk,
+					source: 'hook',
+				};
+			} else if (risk === 'low') {
 				decision = {
 					approved: true,
 					reason: 'auto-approved (low risk)',
 					risk,
+					source: 'default',
 				};
 			} else if (risk === 'medium') {
 				console.log(
@@ -72,10 +135,27 @@ export class PermissionGate {
 					approved: true,
 					reason: 'auto-approved (medium risk, logged)',
 					risk,
+					source: 'default',
 				};
 			} else {
-				decision = await this.resolveHighRiskDecision(tool, args, conversationId);
+				decision = await this.resolveHighRiskDecision(
+					tool,
+					args,
+					conversationId,
+					requestId,
+				);
 			}
+
+			const resolvedStatus =
+				hookStatus ?? (decision.approved ? 'allow' : 'deny');
+			this.publishPermissionResolvedEvent(context, {
+				requestId,
+				status: resolvedStatus,
+				source: decision.source,
+				reason: decision.reason,
+				durationMs: Date.now() - startedAt,
+				ts: Date.now(),
+			});
 
 			this.persistDecision(tool, args, conversationId, decision);
 
@@ -103,17 +183,19 @@ export class PermissionGate {
 		tool: string,
 		args: Record<string, unknown>,
 		conversationId: string,
+		requestId: string,
 	): Promise<Decision> {
 		if (!this.ws) {
 			return {
 				approved: false,
 				reason: 'high-risk tool requires approval (no WebSocket available)',
 				risk: 'high',
+				source: 'default',
 			};
 		}
 
 		const payload: ApprovalRequest = {
-			requestId: crypto.randomUUID(),
+			requestId,
 			tool,
 			args,
 			risk: 'high',
@@ -131,7 +213,102 @@ export class PermissionGate {
 			reason:
 				result.reason ?? (result.approved ? 'user approved' : 'user denied'),
 			risk: 'high',
+			source: 'user',
 		};
+	}
+
+	private async emitPermissionAskHooks(
+		initialContext: HookContextMap['permission:ask'],
+	): Promise<HookContextMap['permission:ask']> {
+		let context = {
+			...initialContext,
+		} as HookContextMap['permission:ask'];
+
+		const handlers = this.ctx.hooks.getHandlers('permission:ask');
+		for (const handler of handlers) {
+			try {
+				const result = await handler(context);
+				if (result == null) {
+					continue;
+				}
+
+				if (
+					typeof result === 'object' &&
+					'cancel' in result &&
+					result.cancel === true
+				) {
+					break;
+				}
+
+				if (typeof result === 'object' && !('cancel' in result)) {
+					const partial = result as Partial<HookContextMap['permission:ask']>;
+					const statusAlreadySet = context.status !== undefined;
+					const incomingStatus = partial.status;
+					const shouldIgnoreIncomingStatus =
+						statusAlreadySet && incomingStatus !== undefined;
+
+					context = {
+						...context,
+						...partial,
+						status: context.status ?? partial.status,
+						reason: shouldIgnoreIncomingStatus
+							? context.reason
+							: (partial.reason ?? context.reason),
+					};
+				}
+			} catch (error) {
+				console.error('[elefant] Hook handler error (permission:ask):', error);
+			}
+		}
+
+		return context;
+	}
+
+	private publishPermissionAskedEvent(
+		context: PermissionCheckContext,
+		event: PermissionAskedEvent,
+	): void {
+		this.publishPermissionEvent(
+			context,
+			'permission.asked',
+			event,
+		);
+	}
+
+	private publishPermissionResolvedEvent(
+		context: PermissionCheckContext,
+		event: PermissionResolvedEvent,
+	): void {
+		this.publishPermissionEvent(
+			context,
+			'permission.resolved',
+			event,
+		);
+	}
+
+	private publishPermissionEvent(
+		context: PermissionCheckContext,
+		eventType: 'permission.asked' | 'permission.resolved',
+		data: PermissionAskedEvent | PermissionResolvedEvent,
+	): void {
+		if (!context.projectId || !context.sessionId) {
+			return;
+		}
+
+		const sse = this.ctx.sse as unknown as {
+			publish?: (
+				projectId: string,
+				sessionId: string,
+				eventType: string,
+				data: unknown,
+			) => void;
+		};
+
+		if (typeof sse.publish !== 'function') {
+			return;
+		}
+
+		sse.publish(context.projectId, context.sessionId, eventType, data);
 	}
 
 	private persistDecision(

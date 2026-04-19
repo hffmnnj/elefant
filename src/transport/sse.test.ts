@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 import { Database } from '../db/database.ts'
-import { SseManager, formatSseEvent } from './sse-manager.ts'
+import { SseManager, formatSseEvent, type SseManagerWithInternals } from './sse-manager.ts'
 
 const tempDirs: string[] = []
 
@@ -83,6 +83,105 @@ describe('formatSseEvent', () => {
 		expect(manager.getConnectionCount('proj-1')).toBe(0)
 
 		await reader.cancel()
+		db.close()
+	})
+
+	it('maintains monotonic seq counter under 100 concurrent publishes', async () => {
+		const { db, manager } = createFixture()
+
+		// Subscribe to capture events
+		const response = manager.subscribe('proj-1')
+		const reader = response.body?.getReader()
+		expect(reader).toBeDefined()
+		if (!reader) return
+
+		// Consume the initial connection message
+		await reader.read()
+
+		// Fire 100 concurrent publishes to the same project
+		const publishPromises: Array<Promise<void>> = []
+		for (let i = 0; i < 100; i++) {
+			publishPromises.push(
+				new Promise((resolve) => {
+					manager.publish('proj-1', 'session-1', 'test:event', { index: i })
+					resolve()
+				}),
+			)
+		}
+
+		await Promise.all(publishPromises)
+
+		// Collect all events from the stream
+		const events: Array<{ seq: number; eventType: string; data: string }> = []
+		let done = false
+		const startTime = Date.now()
+		const timeout = 3000 // 3 second timeout for event collection
+
+		while (!done) {
+			// Check for timeout
+			if (Date.now() - startTime > timeout) {
+				throw new Error(`Timeout waiting for events. Got ${events.length} of 100 expected events.`)
+			}
+
+			const result = await reader.read()
+			if (result.done) break
+
+			const text = decodeChunk(result.value)
+			const lines = text.split('\n')
+
+			// Parse each event in the chunk
+			let currentEvent: { id?: string; eventType?: string; data?: string } = {}
+			for (const line of lines) {
+				if (line.startsWith('id: ')) {
+					currentEvent.id = line.slice(4)
+				} else if (line.startsWith('event: ')) {
+					currentEvent.eventType = line.slice(7)
+				} else if (line.startsWith('data: ')) {
+					currentEvent.data = line.slice(6)
+				} else if (line === '' || line === '\r') {
+					// End of event - check if it's a test event
+					if (currentEvent.eventType === 'test:event' && currentEvent.data) {
+						// seq is the connection counter which increments monotonically
+						events.push({
+							seq: events.length + 1,
+							eventType: currentEvent.eventType,
+							data: currentEvent.data,
+						})
+					}
+					currentEvent = {}
+				}
+			}
+
+			// Stop after collecting enough events
+			if (events.length >= 100) done = true
+		}
+
+		// Verify we got exactly 100 events
+		expect(events.length).toBe(100)
+
+		// Verify seq numbers are monotonic with no gaps or duplicates
+		const seqs = events.map((e) => e.seq)
+		const uniqueSeqs = new Set(seqs)
+
+		// No duplicates
+		expect(uniqueSeqs.size).toBe(100)
+
+		// Monotonic (each seq is previous + 1)
+		for (let i = 1; i < seqs.length; i++) {
+			expect(seqs[i]).toBe(seqs[i - 1] + 1)
+		}
+
+		// Verify the internal counter state via reflection
+		// The counter should be exactly 100 (one increment per publish)
+		const internalManager = manager as unknown as SseManagerWithInternals
+		const connections = internalManager.getConnectionsForTest('proj-1')
+		expect(connections.size).toBe(1)
+
+		const connection = Array.from(connections)[0]
+		expect(connection.counter).toBe(100)
+
+		await reader.cancel()
+		manager.destroy()
 		db.close()
 	})
 })

@@ -36,7 +36,14 @@
 		SettingsIcon,
 		ModelsIcon,
 		AboutIcon,
+		AgentsIcon,
+		RunsIcon,
+		WorktreesIcon,
 	} from '$lib/icons/index.js';
+	import { clearConversation } from '../../../features/chat/chat.svelte.js';
+	import { agentConfigStore } from '$lib/stores/agent-config.svelte.js';
+	import { agentRunsStore } from '$lib/stores/agent-runs.svelte.js';
+	import { worktreesStore } from '$lib/stores/worktrees.svelte.js';
 	import type { IconSvgElement } from '$lib/icons/index.js';
 	import ProjectAvatar from '../../../features/projects/ProjectAvatar.svelte';
 	import SidebarProjectRow from './SidebarProjectRow.svelte';
@@ -52,12 +59,15 @@
 	let expandedProjectIds = $state<Record<string, boolean>>({});
 
 	type BottomNavItem = {
-		id: 'settings' | 'models' | 'about';
+		id: 'settings' | 'models' | 'about' | 'agent-config' | 'agent-runs' | 'worktrees';
 		label: string;
 		icon: IconSvgElement;
 	};
 
 	const bottomNavItems: BottomNavItem[] = [
+		{ id: 'agent-config', label: 'Agent Config', icon: AgentsIcon },
+		{ id: 'agent-runs', label: 'Runs', icon: RunsIcon },
+		{ id: 'worktrees', label: 'Worktrees', icon: WorktreesIcon },
 		{ id: 'settings', label: 'Settings', icon: SettingsIcon },
 		{ id: 'models', label: 'Models', icon: ModelsIcon },
 		{ id: 'about', label: 'About', icon: AboutIcon },
@@ -77,11 +87,14 @@
 	}
 
 	function openSession(project: Project, session: Session): void {
-		// Keep the store's active-project in sync when the user jumps between
-		// projects via the sidebar.
+		// Only switch the active project when the user picks a different project.
 		if (projectsStore.activeProjectId !== project.id) {
 			void projectsStore.selectProject(project.id);
 		}
+		// Clear chat before selecting so the $effect in ChatView sees the change
+		// and clears messages. Calling clearConversation here as well is defensive
+		// belt-and-suspenders for cases where ChatView isn't mounted yet.
+		clearConversation();
 		projectsStore.selectSession(session.id);
 		navigationStore.navigate('chat');
 	}
@@ -94,6 +107,8 @@
 		}
 		try {
 			await projectsStore.createSession(project.id);
+			// Clear chat so the new session starts with an empty message list.
+			clearConversation();
 			// Make sure the project row is expanded so the user sees the new
 			// session appear at the top of the list.
 			if (expandedProjectIds[project.id] !== true) {

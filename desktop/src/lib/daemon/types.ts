@@ -29,10 +29,14 @@ export interface ToolCallPayload {
 
 export interface ChatRequest {
 	messages: MessageRole[];
+	sessionId?: string;
+	projectId?: string;
 	provider?: string;
 	maxIterations?: number;
 	maxTokens?: number;
 	temperature?: number;
+	topP?: number;
+	timeoutMs?: number;
 }
 
 // SSE Event types (discriminated union)
