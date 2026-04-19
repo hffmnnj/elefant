@@ -36,7 +36,13 @@
 		SettingsIcon,
 		ModelsIcon,
 		AboutIcon,
+		AgentsIcon,
+		RunsIcon,
+		WorktreesIcon,
 	} from '$lib/icons/index.js';
+	import { agentConfigStore } from '$lib/stores/agent-config.svelte.js';
+	import { agentRunsStore } from '$lib/stores/agent-runs.svelte.js';
+	import { worktreesStore } from '$lib/stores/worktrees.svelte.js';
 	import type { IconSvgElement } from '$lib/icons/index.js';
 	import ProjectAvatar from '../../../features/projects/ProjectAvatar.svelte';
 	import SidebarProjectRow from './SidebarProjectRow.svelte';
@@ -52,12 +58,15 @@
 	let expandedProjectIds = $state<Record<string, boolean>>({});
 
 	type BottomNavItem = {
-		id: 'settings' | 'models' | 'about';
+		id: 'settings' | 'models' | 'about' | 'agent-config' | 'agent-runs' | 'worktrees';
 		label: string;
 		icon: IconSvgElement;
 	};
 
 	const bottomNavItems: BottomNavItem[] = [
+		{ id: 'agent-config', label: 'Agent Config', icon: AgentsIcon },
+		{ id: 'agent-runs', label: 'Runs', icon: RunsIcon },
+		{ id: 'worktrees', label: 'Worktrees', icon: WorktreesIcon },
 		{ id: 'settings', label: 'Settings', icon: SettingsIcon },
 		{ id: 'models', label: 'Models', icon: ModelsIcon },
 		{ id: 'about', label: 'About', icon: AboutIcon },

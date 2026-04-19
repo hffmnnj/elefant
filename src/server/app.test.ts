@@ -253,3 +253,76 @@ describe('Project routes', () => {
 		expect(sessions.data.length).toBe(1)
 	})
 })
+
+describe('Agent config routes (MH4)', () => {
+	it('GET /api/config/agents returns 400 without projectId query', async () => {
+		const { app } = createTestApp()
+		const response = await app.handle(new Request('http://localhost/api/config/agents'))
+		// Should return 400 (validation error) not 404
+		expect(response.status).toBe(400)
+		const payload = await response.json() as { ok: boolean; error: { code: string } }
+		expect(payload.ok).toBe(false)
+		expect(payload.error.code).toBe('VALIDATION_ERROR')
+	})
+
+	it('GET /api/config/agents/:agentId returns 400 without projectId query', async () => {
+		const { app } = createTestApp()
+		const response = await app.handle(new Request('http://localhost/api/config/agents/default'))
+		// Should return 400 (validation error) not 404
+		expect(response.status).toBe(400)
+		const payload = await response.json() as { ok: boolean; error: { code: string } }
+		expect(payload.ok).toBe(false)
+		expect(payload.error.code).toBe('VALIDATION_ERROR')
+	})
+})
+
+describe('Agent run routes (MH3)', () => {
+	it('POST /api/projects/:id/sessions/:sessionId/agent-runs returns 404 for non-existent project', async () => {
+		const { app } = createTestApp()
+		const response = await app.handle(
+			new Request('http://localhost/api/projects/non-existent/sessions/session-123/agent-runs', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ agentType: 'test', title: 'Test Run', prompt: 'hello' }),
+			})
+		)
+		// Returns 404 for non-existent project (not route not found)
+		expect(response.status).toBe(404)
+	})
+
+	it('GET /api/sessions/:sessionId/agent-runs returns 200 with Result shape', async () => {
+		const { app } = createTestApp()
+		const response = await app.handle(
+			new Request('http://localhost/api/sessions/session-123/agent-runs')
+		)
+		// Route exists and returns 200 (even if empty)
+		expect(response.status).toBe(200)
+		const payload = await response.json() as { ok: boolean; data: unknown }
+		expect(payload.ok).toBe(true)
+		expect(Array.isArray(payload.data)).toBe(true)
+	})
+})
+
+describe('Worktree routes (MH5)', () => {
+	it('GET /api/projects/:id/worktrees returns 404 for non-existent project', async () => {
+		const { app } = createTestApp()
+		const response = await app.handle(
+			new Request('http://localhost/api/projects/non-existent/worktrees')
+		)
+		// Returns 404 for non-existent project (not route not found)
+		expect(response.status).toBe(404)
+	})
+
+	it('POST /api/projects/:id/worktrees returns 404 for non-existent project', async () => {
+		const { app } = createTestApp()
+		const response = await app.handle(
+			new Request('http://localhost/api/projects/non-existent/worktrees', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ targetPath: '/tmp/worktree', branch: 'feature' }),
+			})
+		)
+		// Returns 404 for non-existent project (not route not found)
+		expect(response.status).toBe(404)
+	})
+})

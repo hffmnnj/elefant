@@ -6,6 +6,7 @@ import type { ToolRegistry } from '../tools/registry.ts'
 import type { ElefantWsServer } from '../transport/ws-server.ts'
 import type { SseManager } from '../transport/sse-manager.ts'
 import type { Database } from '../db/database.ts'
+import { ConfigManager } from '../config/index.ts'
 import { registerServerRoutes } from './routes.ts'
 import { registerQuestionRoute } from '../tools/question/route.ts'
 import { mountWsRoute } from './routes-ws.ts'
@@ -13,6 +14,7 @@ import { mountProjectEventsRoute, mountProjectsRoutes } from './routes-projects.
 import { RunRegistry } from '../runs/registry.ts'
 import { mountAgentRunRoutes } from '../runs/routes.ts'
 import { mountWorktreeRoutes } from '../worktree/routes.ts'
+import { createConfigRoutes } from './config-routes.ts'
 
 export function createApp(
 	providerRouter: ProviderRouter,
@@ -87,6 +89,7 @@ export function createApp(
 	)
 
 	const runRegistry = new RunRegistry()
+	const configManager = new ConfigManager()
 
 	// Mount transport routes when available
 	if (ws) mountWsRoute(baseApp, ws)
@@ -95,7 +98,7 @@ export function createApp(
 	// Mount project CRUD routes
 	mountProjectsRoutes(baseApp, db)
 
-	// Mount agent run routes
+	// Mount agent run routes (MH3)
 	mountAgentRunRoutes(baseApp, {
 		db,
 		providerRouter,
@@ -105,8 +108,11 @@ export function createApp(
 		sseManager: sse,
 	})
 
-	// Mount worktree management routes
+	// Mount worktree management routes (MH5)
 	mountWorktreeRoutes(baseApp, { db })
+
+	// Mount agent config routes (MH4)
+	createConfigRoutes(baseApp, providerRouter, configManager)
 
 	return baseApp
 }

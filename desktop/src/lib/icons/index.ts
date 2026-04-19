@@ -40,3 +40,8 @@ export { default as EditIcon } from '@hugeicons/core-free-icons/Edit02Icon';
 export { default as DeleteIcon } from '@hugeicons/core-free-icons/Delete02Icon';
 export { default as FolderIcon } from '@hugeicons/core-free-icons/Folder01Icon';
 export { default as FolderAddIcon } from '@hugeicons/core-free-icons/FolderAddIcon';
+
+// New feature icons (MH3, MH4, MH5)
+export { default as AgentsIcon } from '@hugeicons/core-free-icons/UserGroupIcon';
+export { default as RunsIcon } from '@hugeicons/core-free-icons/PlayIcon';
+export { default as WorktreesIcon } from '@hugeicons/core-free-icons/FolderTreeIcon';

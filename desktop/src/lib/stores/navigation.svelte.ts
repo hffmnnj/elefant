@@ -1,4 +1,4 @@
-type View = "chat" | "settings" | "models" | "about" | "projects";
+type View = "chat" | "settings" | "models" | "about" | "projects" | "agent-config" | "agent-runs" | "worktrees";
 
 let currentView = $state<View>("projects");
 
@@ -29,6 +29,23 @@ export const navigationStore = {
 	},
 	goToProjectPicker(): void {
 		currentView = "projects";
+	},
+	goToAgentConfig(): void {
+		currentView = "agent-config";
+	},
+	goToAgentRuns(): void {
+		if (_getActiveProjectId?.() === null) {
+			currentView = "projects";
+			return;
+		}
+		currentView = "agent-runs";
+	},
+	goToWorktrees(): void {
+		if (_getActiveProjectId?.() === null) {
+			currentView = "projects";
+			return;
+		}
+		currentView = "worktrees";
 	},
 };
 
