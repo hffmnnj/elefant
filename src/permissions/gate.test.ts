@@ -168,4 +168,98 @@ describe('PermissionGate', () => {
 			expect(result.data.approved).toBe(true);
 		}
 	});
+
+	it('short-circuits with hook deny and never requests WS approval', async () => {
+		const hooks = new HookRegistry();
+		hooks.register('permission:ask', () => ({ status: 'deny', reason: 'policy denied' }));
+
+		const ws: MockWs = {
+			requestApproval: mock(async () => ({ approved: true })),
+		};
+
+		const gate = new PermissionGate(
+			createContext(hooks),
+			ws as unknown as ElefantWsServer,
+		);
+
+		const result = await gate.check('webfetch', { url: 'https://example.com' }, 'conv-hook-deny');
+		expect(result.ok).toBe(true);
+		if (result.ok) {
+			expect(result.data.approved).toBe(false);
+			expect(result.data.source).toBe('hook');
+			expect(result.data.reason).toBe('policy denied');
+		}
+
+		expect(ws.requestApproval).toHaveBeenCalledTimes(0);
+	});
+
+	it('short-circuits with hook allow and never requests WS approval', async () => {
+		const hooks = new HookRegistry();
+		hooks.register('permission:ask', () => ({ status: 'allow', reason: 'policy allowed' }));
+
+		const ws: MockWs = {
+			requestApproval: mock(async () => ({ approved: false })),
+		};
+
+		const gate = new PermissionGate(
+			createContext(hooks),
+			ws as unknown as ElefantWsServer,
+		);
+
+		const result = await gate.check('webfetch', { url: 'https://example.com' }, 'conv-hook-allow');
+		expect(result.ok).toBe(true);
+		if (result.ok) {
+			expect(result.data.approved).toBe(true);
+			expect(result.data.source).toBe('hook');
+			expect(result.data.reason).toBe('policy allowed');
+		}
+
+		expect(ws.requestApproval).toHaveBeenCalledTimes(0);
+	});
+
+	it('routes to WebSocket approval flow when status is not set', async () => {
+		const hooks = new HookRegistry();
+		const ws: MockWs = {
+			requestApproval: mock(async () => ({ approved: true, reason: 'approved by user' })),
+		};
+
+		const gate = new PermissionGate(
+			createContext(hooks),
+			ws as unknown as ElefantWsServer,
+		);
+
+		const result = await gate.check('webfetch', { url: 'https://example.com' }, 'conv-hook-ask');
+		expect(result.ok).toBe(true);
+		if (result.ok) {
+			expect(result.data.approved).toBe(true);
+			expect(result.data.source).toBe('user');
+		}
+
+		expect(ws.requestApproval).toHaveBeenCalledTimes(1);
+	});
+
+	it('keeps first hook status when later hooks return a different status', async () => {
+		const hooks = new HookRegistry();
+		hooks.register('permission:ask', () => ({ status: 'deny', reason: 'first wins' }));
+		hooks.register('permission:ask', () => ({ status: 'allow', reason: 'second ignored' }));
+
+		const ws: MockWs = {
+			requestApproval: mock(async () => ({ approved: true })),
+		};
+
+		const gate = new PermissionGate(
+			createContext(hooks),
+			ws as unknown as ElefantWsServer,
+		);
+
+		const result = await gate.check('webfetch', { url: 'https://example.com' }, 'conv-first-hook');
+		expect(result.ok).toBe(true);
+		if (result.ok) {
+			expect(result.data.approved).toBe(false);
+			expect(result.data.source).toBe('hook');
+			expect(result.data.reason).toBe('first wins');
+		}
+
+		expect(ws.requestApproval).toHaveBeenCalledTimes(0);
+	});
 });
