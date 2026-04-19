@@ -18,6 +18,8 @@
 
 	import type { Project, Session } from '$lib/types/project.js';
 	import ProjectAvatar from '../../../features/projects/ProjectAvatar.svelte';
+	import SidebarChildRunChain from './SidebarChildRunChain.svelte';
+	import type { SidebarChildRunRow } from './sidebar-child-run-chain-state.js';
 	import {
 		HugeiconsIcon,
 		ChevronRightIcon,
@@ -34,6 +36,17 @@
 		onToggle: (project: Project) => void;
 		onSelectSession: (project: Project, session: Session) => void;
 		onNewSession: (project: Project) => void;
+		/**
+		 * Rows of the active child-run chain to render beneath the
+		 * active session row. Empty array when no chain applies.
+		 * Caller is responsible for visibility logic via
+		 * `computeSidebarChildRunChain`.
+		 */
+		childRunChainRows?: SidebarChildRunRow[];
+		/** Active child run id (for highlight in the chain). */
+		activeChildRunId?: string | null;
+		/** Callback when a child-run row in the chain is activated. */
+		onSelectChildRun?: (runId: string) => void;
 	};
 
 	let {
@@ -45,7 +58,14 @@
 		onToggle,
 		onSelectSession,
 		onNewSession,
+		childRunChainRows = [],
+		activeChildRunId = null,
+		onSelectChildRun,
 	}: Props = $props();
+
+	function handleSelectChildRun(runId: string): void {
+		onSelectChildRun?.(runId);
+	}
 
 	// Truncate a session's display string. Falls back to id if no title field.
 	function sessionLabel(session: Session): string {
@@ -152,6 +172,13 @@
 								{sessionLabel(session)}
 							</span>
 						</button>
+						{#if activeSessionId === session.id && childRunChainRows.length > 0}
+							<SidebarChildRunChain
+								rows={childRunChainRows}
+								{activeChildRunId}
+								onSelectRun={handleSelectChildRun}
+							/>
+						{/if}
 					</li>
 				{/each}
 			{/if}
