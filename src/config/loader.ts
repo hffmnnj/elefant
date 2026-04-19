@@ -25,11 +25,11 @@ export interface ResolvedAgentConfig extends AgentProfile {
 	_sources: Record<string, ConfigSourceLayer>;
 }
 
-export interface AgentProfileOverride extends Partial<AgentProfile> {
+export type AgentProfileOverride = Omit<Partial<AgentProfile>, 'behavior' | 'limits' | 'tools'> & {
 	behavior?: Partial<AgentBehaviorConfig>;
 	limits?: Partial<AgentRuntimeLimits>;
 	tools?: Partial<ToolPolicyConfig>;
-}
+};
 
 interface RawConfig {
 	port?: number;
@@ -439,39 +439,33 @@ export class ConfigManager {
 
 	public async resolve(
 		agentId: string,
-		projectId: string,
+		projectId: string | undefined,
 		override?: AgentProfileOverride,
 	): Promise<Result<ResolvedAgentConfig, ConfigError>> {
-		const [globalResult, projectResult] = await Promise.all([
-			this.getGlobalConfig(),
-			this.getProjectConfig(projectId),
-		]);
+		const globalResult = await this.getGlobalConfig();
+		if (!globalResult.ok) return globalResult;
 
-		if (!globalResult.ok) {
-			return globalResult;
+		let projectConfig: ElefantConfig | null = null;
+		if (projectId) {
+			const projectResult = await this.getProjectConfig(projectId);
+			if (!projectResult.ok) return projectResult;
+			projectConfig = projectResult.data;
 		}
 
-		if (!projectResult.ok) {
-			return projectResult;
-		}
-
-		return this.resolveFromLayers(agentId, globalResult.data, projectResult.data, override);
+		return this.resolveFromLayers(agentId, globalResult.data, projectConfig, override);
 	}
 
 	public async listResolvedProfiles(
-		projectId: string,
+		projectId: string | undefined,
 	): Promise<Result<Record<string, ResolvedAgentConfig>, ConfigError>> {
-		const [globalResult, projectResult] = await Promise.all([
-			this.getGlobalConfig(),
-			this.getProjectConfig(projectId),
-		]);
+		const globalResult = await this.getGlobalConfig();
+		if (!globalResult.ok) return globalResult;
 
-		if (!globalResult.ok) {
-			return globalResult;
-		}
-
-		if (!projectResult.ok) {
-			return projectResult;
+		let projectConfig: ElefantConfig | null = null;
+		if (projectId) {
+			const projectResult = await this.getProjectConfig(projectId);
+			if (!projectResult.ok) return projectResult;
+			projectConfig = projectResult.data;
 		}
 
 		const ids = new Set<string>(Object.keys(defaultAgentProfiles));
@@ -480,13 +474,13 @@ export class ConfigManager {
 			ids.add(id);
 		}
 
-		for (const id of Object.keys(projectResult.data?.agents ?? {})) {
+		for (const id of Object.keys(projectConfig?.agents ?? {})) {
 			ids.add(id);
 		}
 
 		const resolved: Record<string, ResolvedAgentConfig> = {};
 		for (const id of ids) {
-			const profileResult = this.resolveFromLayers(id, globalResult.data, projectResult.data);
+			const profileResult = this.resolveFromLayers(id, globalResult.data, projectConfig);
 			if (!profileResult.ok) {
 				return profileResult;
 			}
@@ -497,8 +491,10 @@ export class ConfigManager {
 	}
 
 	public async listProjectProfiles(
-		projectId: string,
+		projectId: string | undefined,
 	): Promise<Result<Record<string, AgentProfile>, ConfigError>> {
+		if (!projectId) return ok({});
+
 		const configResult = await this.getProjectConfig(projectId);
 		if (!configResult.ok) {
 			return configResult;
@@ -508,9 +504,14 @@ export class ConfigManager {
 	}
 
 	public async upsertProjectProfile(
-		projectId: string,
+		projectId: string | undefined,
 		profile: AgentProfile,
 	): Promise<Result<void, ConfigError>> {
+		if (!projectId) {
+			// No project scoping — write to the global config instead
+			return this.upsertGlobalProfile(profile);
+		}
+
 		const pathResult = await this.resolveProjectConfigPath(projectId);
 		if (!pathResult.ok) {
 			return pathResult;
@@ -533,10 +534,28 @@ export class ConfigManager {
 		return writeConfigFile(pathResult.data, nextConfig);
 	}
 
+	/** Write a profile to the global config (used when no projectId is provided). */
+	private async upsertGlobalProfile(profile: AgentProfile): Promise<Result<void, ConfigError>> {
+		const configResult = await loadOptionalConfigFromPath(this.globalConfigPath);
+		if (!configResult.ok) return configResult;
+
+		const baseConfig = configResult.data ?? configSchema.parse({});
+		const nextConfig: ElefantConfig = {
+			...baseConfig,
+			agents: { ...(baseConfig.agents ?? {}), [profile.id]: profile },
+		};
+
+		return writeConfigFile(this.globalConfigPath, nextConfig);
+	}
+
 	public async deleteProjectProfile(
-		projectId: string,
+		projectId: string | undefined,
 		agentId: string,
 	): Promise<Result<void, ConfigError>> {
+		if (!projectId) {
+			return err(makeConfigError('VALIDATION_ERROR', 'projectId is required to delete a profile from project config'));
+		}
+
 		const pathResult = await this.resolveProjectConfigPath(projectId);
 		if (!pathResult.ok) {
 			return pathResult;

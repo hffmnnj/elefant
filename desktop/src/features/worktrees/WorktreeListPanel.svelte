@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { untrack } from 'svelte'
 	import { projectsStore } from '$lib/stores/projects.svelte.js'
 	import { worktreesStore } from '$lib/stores/worktrees.svelte.js'
 	import type { WorktreeSummary } from '$lib/types/worktree.js'
@@ -9,14 +10,22 @@
 	const projectId = $derived(projectsStore.activeProjectId)
 	const projectName = $derived(projectsStore.activeProject?.name ?? 'project')
 	const worktrees = $derived(projectId ? worktreesStore.byProjectId[projectId] ?? [] : [])
-	const isLoading = $derived(projectId ? worktreesStore.isLoadingByProject[projectId] === true : false)
+	// Read loading state via untrack to avoid it becoming a reactive dependency
+	// that causes the refresh $effect to re-trigger (would create an infinite loop).
+	const isLoading = $derived(
+		projectId
+			? untrack(() => worktreesStore.isLoadingByProject[projectId] === true)
+			: false,
+	)
 
 	let showCreateDialog = $state(false)
 	let deleting = $state<WorktreeSummary | null>(null)
 
+	// Only re-run when projectId changes — not when loading state or worktree list changes.
 	$effect(() => {
-		if (projectId) {
-			void worktreesStore.refresh(projectId)
+		const id = projectId
+		if (id) {
+			untrack(() => worktreesStore.refresh(id))
 		}
 	})
 
@@ -60,7 +69,11 @@
 	{:else if isLoading}
 		<div class="empty">Loading worktrees…</div>
 	{:else if worktreesStore.lastError}
-		<div class="error" role="alert">{worktreesStore.lastError}</div>
+		{#if worktreesStore.lastError.includes('not_a_repo') || worktreesStore.lastError.includes('not a git repository')}
+			<div class="empty">This project is not a git repository. Worktrees require git.</div>
+		{:else}
+			<div class="error" role="alert">{worktreesStore.lastError}</div>
+		{/if}
 	{:else if worktrees.length === 0}
 		<div class="empty">No worktrees yet. Create your first one.</div>
 	{:else}

@@ -16,8 +16,10 @@ import type { ProviderRouter } from '../providers/router.ts';
 
 const CONFIG_PATH = join(homedir(), '.config', 'elefant', 'elefant.config.json');
 
+// projectId is optional — agent profiles can be global (no project) or
+// project-scoped when a projectId is provided.
 const ProjectQuerySchema = z.object({
-	projectId: z.string().min(1),
+	projectId: z.string().min(1).optional(),
 });
 
 const AgentProfilePatchSchema = z
@@ -249,18 +251,9 @@ export function createConfigRoutes<TApp extends Elysia>(
 
 	app.get('/api/config/agents', async ({ query, set }) => {
 		const queryParse = ProjectQuerySchema.safeParse(query);
-		if (!queryParse.success) {
-			set.status = 400;
-			return {
-				ok: false,
-				error: {
-					code: 'VALIDATION_ERROR',
-					message: 'projectId query param is required',
-				},
-			};
-		}
+		const projectId = queryParse.success ? queryParse.data.projectId : undefined;
 
-		const resolved = await configManager.listResolvedProfiles(queryParse.data.projectId);
+		const resolved = await configManager.listResolvedProfiles(projectId);
 		if (!resolved.ok) {
 			set.status = resolved.error.code === 'FILE_NOT_FOUND' ? 404 : 400;
 			return toErrorPayload(resolved.error);
@@ -271,18 +264,9 @@ export function createConfigRoutes<TApp extends Elysia>(
 
 	app.get('/api/config/agents/:agentId', async ({ params, query, set }) => {
 		const queryParse = ProjectQuerySchema.safeParse(query);
-		if (!queryParse.success) {
-			set.status = 400;
-			return {
-				ok: false,
-				error: {
-					code: 'VALIDATION_ERROR',
-					message: 'projectId query param is required',
-				},
-			};
-		}
+		const projectId = queryParse.success ? queryParse.data.projectId : undefined;
 
-		const resolved = await configManager.resolve(params.agentId, queryParse.data.projectId);
+		const resolved = await configManager.resolve(params.agentId, projectId);
 		if (!resolved.ok) {
 			set.status = resolved.error.code === 'FILE_NOT_FOUND' ? 404 : 400;
 			return toErrorPayload(resolved.error);
@@ -293,16 +277,7 @@ export function createConfigRoutes<TApp extends Elysia>(
 
 	app.post('/api/config/agents', async ({ body, query, set }) => {
 		const queryParse = ProjectQuerySchema.safeParse(query);
-		if (!queryParse.success) {
-			set.status = 400;
-			return {
-				ok: false,
-				error: {
-					code: 'VALIDATION_ERROR',
-					message: 'projectId query param is required',
-				},
-			};
-		}
+		const projectId = queryParse.success ? queryParse.data.projectId : undefined;
 
 		const profileParse = agentProfileSchema.safeParse(body);
 		if (!profileParse.success) {
@@ -316,7 +291,7 @@ export function createConfigRoutes<TApp extends Elysia>(
 			};
 		}
 
-		const projectProfiles = await configManager.listProjectProfiles(queryParse.data.projectId);
+		const projectProfiles = await configManager.listProjectProfiles(projectId);
 		if (!projectProfiles.ok) {
 			set.status = projectProfiles.error.code === 'FILE_NOT_FOUND' ? 404 : 400;
 			return toErrorPayload(projectProfiles.error);
@@ -334,7 +309,7 @@ export function createConfigRoutes<TApp extends Elysia>(
 		}
 
 		const writeResult = await configManager.upsertProjectProfile(
-			queryParse.data.projectId,
+			projectId,
 			profileParse.data,
 		);
 		if (!writeResult.ok) {
@@ -342,7 +317,7 @@ export function createConfigRoutes<TApp extends Elysia>(
 			return toErrorPayload(writeResult.error);
 		}
 
-		const resolved = await configManager.resolve(profileParse.data.id, queryParse.data.projectId);
+		const resolved = await configManager.resolve(profileParse.data.id, projectId);
 		if (!resolved.ok) {
 			set.status = resolved.error.code === 'FILE_NOT_FOUND' ? 404 : 400;
 			return toErrorPayload(resolved.error);
@@ -354,16 +329,7 @@ export function createConfigRoutes<TApp extends Elysia>(
 
 	app.put('/api/config/agents/:agentId', async ({ params, body, query, set }) => {
 		const queryParse = ProjectQuerySchema.safeParse(query);
-		if (!queryParse.success) {
-			set.status = 400;
-			return {
-				ok: false,
-				error: {
-					code: 'VALIDATION_ERROR',
-					message: 'projectId query param is required',
-				},
-			};
-		}
+		const projectId = queryParse.success ? queryParse.data.projectId : undefined;
 
 		const patchParse = AgentProfilePatchSchema.safeParse(body);
 		if (!patchParse.success) {
@@ -377,13 +343,13 @@ export function createConfigRoutes<TApp extends Elysia>(
 			};
 		}
 
-		const existingProjectProfiles = await configManager.listProjectProfiles(queryParse.data.projectId);
+		const existingProjectProfiles = await configManager.listProjectProfiles(projectId);
 		if (!existingProjectProfiles.ok) {
 			set.status = existingProjectProfiles.error.code === 'FILE_NOT_FOUND' ? 404 : 400;
 			return toErrorPayload(existingProjectProfiles.error);
 		}
 
-		const baseProfileResult = await configManager.resolve(params.agentId, queryParse.data.projectId);
+		const baseProfileResult = await configManager.resolve(params.agentId, projectId);
 		if (!baseProfileResult.ok) {
 			set.status = baseProfileResult.error.code === 'FILE_NOT_FOUND' ? 404 : 400;
 			return toErrorPayload(baseProfileResult.error);
@@ -421,7 +387,7 @@ export function createConfigRoutes<TApp extends Elysia>(
 		}
 
 		const updateResult = await configManager.upsertProjectProfile(
-			queryParse.data.projectId,
+			projectId,
 			profileParse.data,
 		);
 		if (!updateResult.ok) {
@@ -429,7 +395,7 @@ export function createConfigRoutes<TApp extends Elysia>(
 			return toErrorPayload(updateResult.error);
 		}
 
-		const resolved = await configManager.resolve(params.agentId, queryParse.data.projectId);
+		const resolved = await configManager.resolve(params.agentId, projectId);
 		if (!resolved.ok) {
 			set.status = resolved.error.code === 'FILE_NOT_FOUND' ? 404 : 400;
 			return toErrorPayload(resolved.error);
@@ -440,19 +406,10 @@ export function createConfigRoutes<TApp extends Elysia>(
 
 	app.delete('/api/config/agents/:agentId', async ({ params, query, set }) => {
 		const queryParse = ProjectQuerySchema.safeParse(query);
-		if (!queryParse.success) {
-			set.status = 400;
-			return {
-				ok: false,
-				error: {
-					code: 'VALIDATION_ERROR',
-					message: 'projectId query param is required',
-				},
-			};
-		}
+		const projectId = queryParse.success ? queryParse.data.projectId : undefined;
 
 		const deletion = await configManager.deleteProjectProfile(
-			queryParse.data.projectId,
+			projectId,
 			params.agentId,
 		);
 		if (!deletion.ok) {

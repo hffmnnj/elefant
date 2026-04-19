@@ -9,6 +9,11 @@ import { HookRegistry } from '../hooks/registry.ts'
 import { SseManager } from '../transport/sse-manager.ts'
 import type { ElefantWsServer } from '../transport/ws-server.ts'
 import { PermissionGate } from './gate.ts'
+import type { PermissionDecisionStatus } from './types.ts'
+
+function hookReturn(status: PermissionDecisionStatus, reason?: string) {
+	return { status, reason }
+}
 
 interface MockApprovalResult {
 	approved: boolean
@@ -90,7 +95,7 @@ describe('PermissionGate integration', () => {
 
 	it('permission:ask hook can force allow and bypass WS', async () => {
 		const hooks = new HookRegistry()
-		hooks.register('permission:ask', () => ({ status: 'allow', reason: 'plugin allowlist' }))
+		hooks.register('permission:ask', () => hookReturn('allow', 'plugin allowlist'))
 
 		const ws: MockWs = {
 			requestApproval: mock(async () => ({ approved: false })),
@@ -114,7 +119,7 @@ describe('PermissionGate integration', () => {
 	it('SSE publishes permission.asked and permission.resolved with matching requestId', async () => {
 		const fixture = createSseFixture()
 		const hooks = new HookRegistry()
-		hooks.register('permission:ask', () => ({ status: 'deny', reason: 'planner cannot run bash' }))
+		hooks.register('permission:ask', () => hookReturn('deny', 'planner cannot run bash'))
 
 		const gate = new PermissionGate(createMockContext(hooks, fixture.sse), null)
 

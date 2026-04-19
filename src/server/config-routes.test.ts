@@ -164,18 +164,19 @@ describe('config routes - agent profiles', () => {
 		expect(missingDeleteResponse.status).toBe(404);
 	});
 
-	it('returns validation error envelope when projectId is missing', async () => {
+	it('returns global default profile when projectId is omitted', async () => {
+		// projectId is now optional — omitting it resolves against global defaults only
 		const response = await app.handle(
 			new Request('http://localhost/api/config/agents/executor'),
 		);
-		expect(response.status).toBe(400);
+		expect(response.status).toBe(200);
 
 		const payload = (await response.json()) as {
 			ok: boolean;
-			error: { code: string; message: string };
+			data: { id: string };
 		};
 
-		expect(payload.ok).toBe(false);
-		expect(payload.error.code).toBe('VALIDATION_ERROR');
+		expect(payload.ok).toBe(true);
+		expect(payload.data.id).toBe('executor');
 	});
 });

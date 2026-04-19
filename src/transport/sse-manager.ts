@@ -158,7 +158,8 @@ export class SseManager {
 		await lock.promise
 
 		// Create new lock that will be resolved when we're done
-		let releaseLock: () => void
+		// eslint-disable-next-line prefer-const
+		let releaseLock!: () => void
 		const newLockPromise = new Promise<void>((resolve) => {
 			releaseLock = resolve
 		})

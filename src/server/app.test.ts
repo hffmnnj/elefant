@@ -255,24 +255,24 @@ describe('Project routes', () => {
 })
 
 describe('Agent config routes (MH4)', () => {
-	it('GET /api/config/agents returns 400 without projectId query', async () => {
+	it('GET /api/config/agents returns 200 without projectId (uses global config)', async () => {
 		const { app } = createTestApp()
 		const response = await app.handle(new Request('http://localhost/api/config/agents'))
-		// Should return 400 (validation error) not 404
-		expect(response.status).toBe(400)
-		const payload = await response.json() as { ok: boolean; error: { code: string } }
-		expect(payload.ok).toBe(false)
-		expect(payload.error.code).toBe('VALIDATION_ERROR')
+		// projectId is now optional — omitting it returns global default profiles
+		expect(response.status).toBe(200)
+		const payload = await response.json() as { ok: boolean; data: Record<string, unknown> }
+		expect(payload.ok).toBe(true)
+		expect(typeof payload.data).toBe('object')
 	})
 
-	it('GET /api/config/agents/:agentId returns 400 without projectId query', async () => {
+	it('GET /api/config/agents/:agentId returns 200 without projectId (uses global config)', async () => {
 		const { app } = createTestApp()
 		const response = await app.handle(new Request('http://localhost/api/config/agents/default'))
-		// Should return 400 (validation error) not 404
-		expect(response.status).toBe(400)
-		const payload = await response.json() as { ok: boolean; error: { code: string } }
-		expect(payload.ok).toBe(false)
-		expect(payload.error.code).toBe('VALIDATION_ERROR')
+		// projectId is now optional — omitting it resolves against global defaults only
+		expect(response.status).toBe(200)
+		const payload = await response.json() as { ok: boolean; data: Record<string, unknown> }
+		expect(payload.ok).toBe(true)
+		expect(payload.data).toBeDefined()
 	})
 })
 

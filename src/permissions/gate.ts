@@ -240,19 +240,20 @@ export class PermissionGate {
 					break;
 				}
 
-				if (typeof result === 'object') {
+				if (typeof result === 'object' && !('cancel' in result)) {
+					const partial = result as Partial<HookContextMap['permission:ask']>;
 					const statusAlreadySet = context.status !== undefined;
-					const incomingStatus = result.status;
+					const incomingStatus = partial.status;
 					const shouldIgnoreIncomingStatus =
 						statusAlreadySet && incomingStatus !== undefined;
 
 					context = {
 						...context,
-						...result,
-						status: context.status ?? result.status,
+						...partial,
+						status: context.status ?? partial.status,
 						reason: shouldIgnoreIncomingStatus
 							? context.reason
-							: (result.reason ?? context.reason),
+							: (partial.reason ?? context.reason),
 					};
 				}
 			} catch (error) {

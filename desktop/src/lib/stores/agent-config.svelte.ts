@@ -50,7 +50,10 @@ async function refresh(): Promise<void> {
 		const response = await fetch(`${DAEMON_URL}/api/config/agents`, {
 			headers: { Accept: 'application/json' },
 		});
-		profiles = await readResult<AgentProfile[]>(response, 'GET /api/config/agents');
+		// Server returns { ok: true, data: Record<string, ResolvedAgentConfig> }
+		// We convert the record values to an array for the UI.
+		const record = await readResult<Record<string, AgentProfile>>(response, 'GET /api/config/agents');
+		profiles = Object.values(record);
 	} catch (err) {
 		setError(err instanceof Error ? err.message : 'Failed to load agent profiles');
 	} finally {
