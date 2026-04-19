@@ -34,6 +34,12 @@ let isLoading = $state(false);
 // O(1) index for child lookups: parentRunId -> child runIds (unsorted)
 let childrenByParent = $state<Record<string, string[]>>({});
 
+// Status tracking for sidebar indicator dots (MH3)
+// unseenRunIds: runs that have new output since last viewed
+let unseenRunIds = $state<Set<string>>(new Set());
+// awaitingQuestionIds: runs with an outstanding question awaiting user input
+let awaitingQuestionIds = $state<Set<string>>(new Set());
+
 // SSE subscription state (kept at module level — there is at most one
 // active subscription per project at a time).
 let sseSubscription: {
@@ -123,6 +129,22 @@ function activeChildPath(rootRunId: string, activeRunId?: string): AgentRun[] {
 
 	// If we exited the loop without finding rootRunId, activeRunId is not a descendant
 	return [];
+}
+
+/**
+ * Returns true if the run has unseen output (blue dot indicator).
+ * Cleared when the user navigates to that run via setActiveRun.
+ */
+function isUnseen(runId: string): boolean {
+	return unseenRunIds.has(runId);
+}
+
+/**
+ * Returns true if the run has an outstanding question awaiting answer (yellow dot indicator).
+ * Set when agent_run.question arrives; cleared on next token/tool_call/tool_result.
+ */
+function isAwaitingQuestion(runId: string): boolean {
+	return awaitingQuestionIds.has(runId);
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -238,6 +260,16 @@ export function applyRunEvent(envelope: AgentRunEventEnvelope): void {
 		case 'agent_run.token': {
 			const text = typeof data.text === 'string' ? data.text : '';
 			appendToTranscript(runId, { kind: 'token', text, seq });
+			// Mark as unseen if this run is not currently active (MH3 blue dot)
+			if (activeRunId !== runId) {
+				unseenRunIds = new Set([...unseenRunIds, runId]);
+			}
+			// Clear awaiting question flag — agent moved past the question (MH3 yellow dot)
+			if (awaitingQuestionIds.has(runId)) {
+				const next = new Set(awaitingQuestionIds);
+				next.delete(runId);
+				awaitingQuestionIds = next;
+			}
 			break;
 		}
 		case 'agent_run.tool_call': {
@@ -251,6 +283,16 @@ export function applyRunEvent(envelope: AgentRunEventEnvelope): void {
 						: {},
 				seq,
 			});
+			// Mark as unseen if this run is not currently active (MH3 blue dot)
+			if (activeRunId !== runId) {
+				unseenRunIds = new Set([...unseenRunIds, runId]);
+			}
+			// Clear awaiting question flag — agent moved past the question (MH3 yellow dot)
+			if (awaitingQuestionIds.has(runId)) {
+				const next = new Set(awaitingQuestionIds);
+				next.delete(runId);
+				awaitingQuestionIds = next;
+			}
 			break;
 		}
 		case 'agent_run.tool_result': {
@@ -261,6 +303,16 @@ export function applyRunEvent(envelope: AgentRunEventEnvelope): void {
 				isError: typeof data.isError === 'boolean' ? data.isError : false,
 				seq,
 			});
+			// Mark as unseen if this run is not currently active (MH3 blue dot)
+			if (activeRunId !== runId) {
+				unseenRunIds = new Set([...unseenRunIds, runId]);
+			}
+			// Clear awaiting question flag — agent moved past the question (MH3 yellow dot)
+			if (awaitingQuestionIds.has(runId)) {
+				const next = new Set(awaitingQuestionIds);
+				next.delete(runId);
+				awaitingQuestionIds = next;
+			}
 			break;
 		}
 		case 'agent_run.tool_call_metadata': {
@@ -303,6 +355,8 @@ export function applyRunEvent(envelope: AgentRunEventEnvelope): void {
 				multiple: typeof data.multiple === 'boolean' ? data.multiple : false,
 				seq,
 			});
+			// Set awaiting question flag (MH3 yellow dot indicator)
+			awaitingQuestionIds = new Set([...awaitingQuestionIds, runId]);
 			break;
 		}
 		case 'agent_run.done': {
@@ -589,6 +643,12 @@ async function cancel(runId: string): Promise<boolean> {
 
 function setActiveRun(runId: string | null): void {
 	activeRunId = runId;
+	// Clear unseen flag when user navigates to this run (MH3 blue dot)
+	if (runId && unseenRunIds.has(runId)) {
+		const next = new Set(unseenRunIds);
+		next.delete(runId);
+		unseenRunIds = next;
+	}
 }
 
 function openRun(runId: string): void {
@@ -616,6 +676,8 @@ export function resetAgentRunsStore(): void {
 	lastError = null;
 	isLoading = false;
 	childrenByParent = {};
+	unseenRunIds = new Set();
+	awaitingQuestionIds = new Set();
 }
 
 /** Seed a run row without hitting the daemon. */
@@ -653,6 +715,8 @@ export const agentRunsStore = {
 	runTree,
 	childRunsForRun,
 	activeChildPath,
+	isUnseen,
+	isAwaitingQuestion,
 	refreshSession,
 	spawn,
 	cancel,

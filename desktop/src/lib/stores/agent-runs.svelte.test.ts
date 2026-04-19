@@ -577,6 +577,255 @@ describe('agentRunsStore', () => {
 		});
 	});
 
+	describe('status tracking — unseen output (MH3 blue dot)', () => {
+		it('marks non-active run as unseen when it receives a token', () => {
+			_seedRun(makeRun({ runId: 'run-a' }));
+			_seedRun(makeRun({ runId: 'run-b' }));
+			agentRunsStore.setActiveRun('run-a'); // run-a is active
+
+			// Token on non-active run-b should mark it unseen
+			agentRunsStore.applyRunEvent(
+				makeEnvelope({ runId: 'run-b', type: 'agent_run.token', seq: 1, data: { text: 'hello' } }),
+			);
+
+			expect(agentRunsStore.isUnseen('run-b')).toBe(true);
+			expect(agentRunsStore.isUnseen('run-a')).toBe(false); // active run not marked
+		});
+
+		it('marks non-active run as unseen when it receives a tool_call', () => {
+			_seedRun(makeRun({ runId: 'run-a' }));
+			_seedRun(makeRun({ runId: 'run-b' }));
+			agentRunsStore.setActiveRun('run-a');
+
+			agentRunsStore.applyRunEvent(
+				makeEnvelope({
+					runId: 'run-b',
+					type: 'agent_run.tool_call',
+					seq: 1,
+					data: { id: 'tc-1', name: 'bash', arguments: {} },
+				}),
+			);
+
+			expect(agentRunsStore.isUnseen('run-b')).toBe(true);
+		});
+
+		it('marks non-active run as unseen when it receives a tool_result', () => {
+			_seedRun(makeRun({ runId: 'run-a' }));
+			_seedRun(makeRun({ runId: 'run-b' }));
+			agentRunsStore.setActiveRun('run-a');
+
+			agentRunsStore.applyRunEvent(
+				makeEnvelope({
+					runId: 'run-b',
+					type: 'agent_run.tool_result',
+					seq: 1,
+					data: { toolCallId: 'tc-1', content: 'output', isError: false },
+				}),
+			);
+
+			expect(agentRunsStore.isUnseen('run-b')).toBe(true);
+		});
+
+		it('does NOT mark active run as unseen when it receives events', () => {
+			_seedRun(makeRun({ runId: 'run-a' }));
+			agentRunsStore.setActiveRun('run-a'); // run-a is active
+
+			agentRunsStore.applyRunEvent(
+				makeEnvelope({ runId: 'run-a', type: 'agent_run.token', seq: 1, data: { text: 'hello' } }),
+			);
+			agentRunsStore.applyRunEvent(
+				makeEnvelope({
+					runId: 'run-a',
+					type: 'agent_run.tool_call',
+					seq: 2,
+					data: { id: 'tc-1', name: 'bash', arguments: {} },
+				}),
+			);
+
+			expect(agentRunsStore.isUnseen('run-a')).toBe(false);
+		});
+
+		it('clears unseen flag when setActiveRun is called for that run', () => {
+			_seedRun(makeRun({ runId: 'run-a' }));
+			_seedRun(makeRun({ runId: 'run-b' }));
+			agentRunsStore.setActiveRun('run-a');
+
+			// Mark run-b as unseen
+			agentRunsStore.applyRunEvent(
+				makeEnvelope({ runId: 'run-b', type: 'agent_run.token', seq: 1, data: { text: 'hello' } }),
+			);
+			expect(agentRunsStore.isUnseen('run-b')).toBe(true);
+
+			// Navigate to run-b — unseen flag should clear
+			agentRunsStore.setActiveRun('run-b');
+			expect(agentRunsStore.isUnseen('run-b')).toBe(false);
+		});
+
+		it('is isolated per runId — flags for run A do not affect run B', () => {
+			_seedRun(makeRun({ runId: 'run-a' }));
+			_seedRun(makeRun({ runId: 'run-b' }));
+			_seedRun(makeRun({ runId: 'run-c' }));
+			agentRunsStore.setActiveRun('run-a');
+
+			// Mark run-b and run-c as unseen
+			agentRunsStore.applyRunEvent(
+				makeEnvelope({ runId: 'run-b', type: 'agent_run.token', seq: 1, data: { text: 'B' } }),
+			);
+			agentRunsStore.applyRunEvent(
+				makeEnvelope({ runId: 'run-c', type: 'agent_run.token', seq: 1, data: { text: 'C' } }),
+			);
+
+			expect(agentRunsStore.isUnseen('run-a')).toBe(false);
+			expect(agentRunsStore.isUnseen('run-b')).toBe(true);
+			expect(agentRunsStore.isUnseen('run-c')).toBe(true);
+
+			// Clear run-b by navigating to it
+			agentRunsStore.setActiveRun('run-b');
+			expect(agentRunsStore.isUnseen('run-b')).toBe(false);
+			expect(agentRunsStore.isUnseen('run-c')).toBe(true); // run-c still unseen
+		});
+
+		it('is cleared by resetAgentRunsStore', () => {
+			_seedRun(makeRun({ runId: 'run-a' }));
+			agentRunsStore.setActiveRun(null); // no active run
+
+			agentRunsStore.applyRunEvent(
+				makeEnvelope({ runId: 'run-a', type: 'agent_run.token', seq: 1, data: { text: 'hello' } }),
+			);
+			expect(agentRunsStore.isUnseen('run-a')).toBe(true);
+
+			resetAgentRunsStore();
+			expect(agentRunsStore.isUnseen('run-a')).toBe(false);
+		});
+	});
+
+	describe('status tracking — awaiting question (MH3 yellow dot)', () => {
+		it('sets awaitingQuestion flag on agent_run.question event', () => {
+			_seedRun(makeRun({ runId: 'run-a' }));
+
+			expect(agentRunsStore.isAwaitingQuestion('run-a')).toBe(false);
+
+			agentRunsStore.applyRunEvent(
+				makeEnvelope({
+					runId: 'run-a',
+					type: 'agent_run.question',
+					seq: 1,
+					data: {
+						questionId: 'q-1',
+						question: 'Continue?',
+						options: [{ label: 'yes' }],
+						multiple: false,
+					},
+				}),
+			);
+
+			expect(agentRunsStore.isAwaitingQuestion('run-a')).toBe(true);
+		});
+
+		it('clears awaitingQuestion flag on subsequent token event', () => {
+			_seedRun(makeRun({ runId: 'run-a' }));
+
+			// Set the flag via question
+			agentRunsStore.applyRunEvent(
+				makeEnvelope({
+					runId: 'run-a',
+					type: 'agent_run.question',
+					seq: 1,
+					data: { questionId: 'q-1', question: 'Continue?', options: [], multiple: false },
+				}),
+			);
+			expect(agentRunsStore.isAwaitingQuestion('run-a')).toBe(true);
+
+			// Clear via token
+			agentRunsStore.applyRunEvent(
+				makeEnvelope({ runId: 'run-a', type: 'agent_run.token', seq: 2, data: { text: 'ok' } }),
+			);
+			expect(agentRunsStore.isAwaitingQuestion('run-a')).toBe(false);
+		});
+
+		it('clears awaitingQuestion flag on subsequent tool_call event', () => {
+			_seedRun(makeRun({ runId: 'run-a' }));
+
+			agentRunsStore.applyRunEvent(
+				makeEnvelope({
+					runId: 'run-a',
+					type: 'agent_run.question',
+					seq: 1,
+					data: { questionId: 'q-1', question: 'Continue?', options: [], multiple: false },
+				}),
+			);
+			expect(agentRunsStore.isAwaitingQuestion('run-a')).toBe(true);
+
+			agentRunsStore.applyRunEvent(
+				makeEnvelope({
+					runId: 'run-a',
+					type: 'agent_run.tool_call',
+					seq: 2,
+					data: { id: 'tc-1', name: 'bash', arguments: {} },
+				}),
+			);
+			expect(agentRunsStore.isAwaitingQuestion('run-a')).toBe(false);
+		});
+
+		it('clears awaitingQuestion flag on subsequent tool_result event', () => {
+			_seedRun(makeRun({ runId: 'run-a' }));
+
+			agentRunsStore.applyRunEvent(
+				makeEnvelope({
+					runId: 'run-a',
+					type: 'agent_run.question',
+					seq: 1,
+					data: { questionId: 'q-1', question: 'Continue?', options: [], multiple: false },
+				}),
+			);
+			expect(agentRunsStore.isAwaitingQuestion('run-a')).toBe(true);
+
+			agentRunsStore.applyRunEvent(
+				makeEnvelope({
+					runId: 'run-a',
+					type: 'agent_run.tool_result',
+					seq: 2,
+					data: { toolCallId: 'tc-1', content: 'result', isError: false },
+				}),
+			);
+			expect(agentRunsStore.isAwaitingQuestion('run-a')).toBe(false);
+		});
+
+		it('is isolated per runId — question on run A does not affect run B', () => {
+			_seedRun(makeRun({ runId: 'run-a' }));
+			_seedRun(makeRun({ runId: 'run-b' }));
+
+			agentRunsStore.applyRunEvent(
+				makeEnvelope({
+					runId: 'run-a',
+					type: 'agent_run.question',
+					seq: 1,
+					data: { questionId: 'q-1', question: 'Continue?', options: [], multiple: false },
+				}),
+			);
+
+			expect(agentRunsStore.isAwaitingQuestion('run-a')).toBe(true);
+			expect(agentRunsStore.isAwaitingQuestion('run-b')).toBe(false);
+		});
+
+		it('is cleared by resetAgentRunsStore', () => {
+			_seedRun(makeRun({ runId: 'run-a' }));
+
+			agentRunsStore.applyRunEvent(
+				makeEnvelope({
+					runId: 'run-a',
+					type: 'agent_run.question',
+					seq: 1,
+					data: { questionId: 'q-1', question: 'Continue?', options: [], multiple: false },
+				}),
+			);
+			expect(agentRunsStore.isAwaitingQuestion('run-a')).toBe(true);
+
+			resetAgentRunsStore();
+			expect(agentRunsStore.isAwaitingQuestion('run-a')).toBe(false);
+		});
+	});
+
 	describe('agent_run.tool_call_metadata', () => {
 		it('merges metadata onto existing tool_call entry by toolCallId', () => {
 			_seedRun(makeRun({ runId: 'run-a' }));
