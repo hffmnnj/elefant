@@ -210,25 +210,34 @@ Use agent_session_search to query the child's full message history by runId.`,
 
 			let shouldPersistMessages = false
 
-			if (hasPersistableContext) {
-				const createResult = createRun(database, {
-					run_id: childRunId,
-					session_id: currentRun.sessionId,
-					project_id: currentRun.projectId,
-					parent_run_id: persistedParentRunId,
-					agent_type: params.agent_type,
-					title: params.description,
-					status: 'running',
-					context_mode: contextMode,
-					started_at: new Date().toISOString(),
-				})
-				if (!createResult.ok) {
-					// Log but don't abort — child can still run without a DB row
-					console.error(`[task] createRun failed (non-fatal): ${createResult.error.message}`)
-				} else {
-					shouldPersistMessages = true
-				}
+		if (hasPersistableContext) {
+			// Ensure a session row exists so the FK constraint on agent_runs.session_id
+			// passes. Chat sessions use ephemeral UUIDs not tracked in sessions — this
+			// upsert is a no-op for real sessions and a safe fallback for chat ones.
+			database.db.run(
+				`INSERT OR IGNORE INTO sessions (id, project_id, phase, status, started_at, updated_at)
+				 VALUES (?, ?, 'idle', 'pending', datetime('now'), datetime('now'))`,
+				[currentRun.sessionId, currentRun.projectId],
+			)
+
+			const createResult = createRun(database, {
+				run_id: childRunId,
+				session_id: currentRun.sessionId,
+				project_id: currentRun.projectId,
+				parent_run_id: persistedParentRunId,
+				agent_type: params.agent_type,
+				title: params.description,
+				status: 'running',
+				context_mode: contextMode,
+				started_at: new Date().toISOString(),
+			})
+			if (!createResult.ok) {
+				// Log but don't abort — child can still run without a DB row
+				console.error(`[task] createRun failed (non-fatal): ${createResult.error.message}`)
+			} else {
+				shouldPersistMessages = true
 			}
+		}
 
 			runRegistry.registerRun(childRunId, {
 				controller: childController,
