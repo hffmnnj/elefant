@@ -10,10 +10,30 @@
 	import type { MessageRole } from '$lib/daemon/types.js';
 	import type { AgentRunOverride } from '$lib/types/agent-config.js';
 	import { projectsStore } from '$lib/stores/projects.svelte.js';
+	import { agentRunsStore } from '$lib/stores/agent-runs.svelte.js';
 
 	let showAdvanced = $state(false);
 	let showOverrideDialog = $state(false);
 	let abortController: AbortController | null = null;
+
+	// Subscribe to the active project's SSE event stream so the
+	// agent-runs store receives `agent_run.spawned` and
+	// `agent_run.tool_call_metadata` envelopes for child runs the
+	// assistant spawns via the `task` tool. Without this, TaskToolCard's
+	// title-match resolver never finds the child runId and the card is
+	// stuck showing "Starting…" forever.
+	//
+	// `subscribeToProject` is idempotent for the same projectId and
+	// internally tears down the previous subscription when projectId
+	// changes, so this effect is safe to re-run on every projectId
+	// change. We deliberately do NOT call `unsubscribe` on cleanup —
+	// the project SSE stream is shared with the agent-runs views, and
+	// the store owns its lifecycle.
+	$effect(() => {
+		const projectId = projectsStore.activeProjectId;
+		if (!projectId) return;
+		agentRunsStore.subscribeToProject(projectId);
+	});
 
 	// Clear the in-memory message list whenever the active session changes so
 	// the user always sees a clean slate for the session they just switched to.
