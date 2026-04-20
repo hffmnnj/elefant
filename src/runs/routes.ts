@@ -407,7 +407,7 @@ export function mountAgentRunRoutes(
 		}
 	})
 
-	app.get('/api/projects/:projectId/runs/:runId/messages', ({ params, set }) => {
+	app.get('/api/projects/:id/runs/:runId/messages', ({ params, set }) => {
 		const run = getRun(deps.db, params.runId)
 		if (!run.ok) {
 			set.status = 404
@@ -420,7 +420,7 @@ export function mountAgentRunRoutes(
 			}
 		}
 
-		if (run.data.project_id !== params.projectId) {
+		if (run.data.project_id !== params.id) {
 			set.status = 404
 			return {
 				ok: false,
