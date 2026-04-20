@@ -19,36 +19,25 @@
 	import { navigationStore } from '$lib/stores/navigation.svelte.js';
 	import AgentTaskCard from '$features/agent-runs/AgentTaskCard.svelte';
 	import type { ToolCardProps } from './types.js';
+	import {
+		extractTaskAgentType,
+		extractTaskDescription,
+		resolveTaskToolCardChildRunId,
+	} from './task-tool-card-state.js';
 
 	let { toolCall }: ToolCardProps = $props();
 
-	// Defensive reads — `arguments` may be empty mid-stream while the
-	// model is still emitting tool-call JSON. Falls back to safe blanks
-	// so the card can render the "Starting…" placeholder rather than
-	// throwing.
-	const description = $derived(
-		typeof toolCall.arguments?.description === 'string'
-			? toolCall.arguments.description
-			: '',
-	);
+	// All derivations live in the pure `task-tool-card-state` module so
+	// they can be unit tested without a component renderer (see
+	// TaskToolCard.test.ts).
+	const description = $derived(extractTaskDescription(toolCall));
+	const agentType = $derived(extractTaskAgentType(toolCall));
 
-	const agentType = $derived(
-		typeof toolCall.arguments?.agent_type === 'string'
-			? toolCall.arguments.agent_type
-			: 'agent',
+	// Re-runs whenever `agentRunsStore.runs` changes — i.e. as soon as
+	// the matching `agent_run.spawned` SSE event lands.
+	const resolvedRunId = $derived.by<string | null>(() =>
+		resolveTaskToolCardChildRunId(description, agentRunsStore.runs),
 	);
-
-	// Resolve the child run id by matching against spawned runs in the
-	// store. Empty descriptions never resolve (avoids matching the first
-	// titleless run by accident). Re-runs whenever `agentRunsStore.runs`
-	// changes — i.e. as soon as the `agent_run.spawned` SSE event lands.
-	const resolvedRunId = $derived.by<string | null>(() => {
-		if (!description) return null;
-		const match = Object.values(agentRunsStore.runs).find(
-			(r) => r.title === description,
-		);
-		return match ? match.runId : null;
-	});
 
 	function handleOpenChildRun(runId: string): void {
 		navigationStore.openChildRun(runId);
