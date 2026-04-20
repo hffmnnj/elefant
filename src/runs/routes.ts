@@ -10,6 +10,7 @@ import { runAgentLoop } from '../server/agent-loop.ts'
 import { createToolRegistryForRun, type ToolRegistry } from '../tools/registry.ts'
 import type { SseManager } from '../transport/sse-manager.ts'
 import { createRun, getRun, listChildRunsByParent, listRunsBySession, markRunEnded } from './dal.ts'
+import { listMessages } from './messages.js'
 import { buildInitialMessages } from './context.ts'
 import { publishRunEvent, publishStatusChange } from './events.ts'
 import type { RunRegistry } from './registry.ts'
@@ -402,6 +403,40 @@ export function mountAgentRunRoutes(
 			data: {
 				runId: params.runId,
 				status: 'cancelled',
+			},
+		}
+	})
+
+	app.get('/api/projects/:projectId/runs/:runId/messages', ({ params, set }) => {
+		const run = getRun(deps.db, params.runId)
+		if (!run.ok) {
+			set.status = 404
+			return {
+				ok: false,
+				error: {
+					code: 'FILE_NOT_FOUND',
+					message: 'Run not found',
+				},
+			}
+		}
+
+		if (run.data.project_id !== params.projectId) {
+			set.status = 404
+			return {
+				ok: false,
+				error: {
+					code: 'FILE_NOT_FOUND',
+					message: 'Run not found for project',
+				},
+			}
+		}
+
+		const messages = listMessages(deps.db, params.runId)
+
+		return {
+			ok: true,
+			data: {
+				messages,
 			},
 		}
 	})
