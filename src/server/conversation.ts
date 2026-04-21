@@ -10,6 +10,7 @@ import { createToolRegistryForRun, type ToolRegistry } from '../tools/registry.t
 import { runAgentLoop } from './agent-loop.ts'
 import { formatSSEEvent, formatSSEKeepalive } from './sse.ts'
 import type { QuestionSsePayload } from '../tools/question/emitter.ts'
+import { createMetadataEmitter, type ToolCallMetadataPayload } from '../tools/task/metadata-emitter.ts'
 import type { RunContext } from '../runs/types.ts'
 import type { Database } from '../db/database.ts'
 import type { RunRegistry } from '../runs/registry.ts'
@@ -83,8 +84,23 @@ function toSSEChunk(event: StreamEvent): string | null {
 		return formatSSEEvent('token', { text: event.text })
 	}
 
+	// Emit an early `tool_call` as soon as the provider announces the tool
+	// name and id (before arguments have been streamed). This lets the chat
+	// UI render the tool card immediately — the tool name is enough to pick
+	// the right card component (e.g. TaskToolCard) and show a spinner.
+	// A `tool_call_update` event follows when arguments are complete.
+	if (event.type === 'tool_call_start') {
+		return formatSSEEvent('tool_call', {
+			id: event.toolCall.id,
+			name: event.toolCall.name,
+			arguments: {},
+		})
+	}
+
+	// Update the already-rendered tool card with the fully-parsed arguments
+	// once streaming is complete.
 	if (event.type === 'tool_call_complete') {
-		return formatSSEEvent('tool_call', toToolCallPayload(event.toolCall))
+		return formatSSEEvent('tool_call_update', toToolCallPayload(event.toolCall))
 	}
 
 	if (event.type === 'tool_result') {
@@ -117,6 +133,17 @@ function toQuestionSSEChunk(payload: QuestionSsePayload): string {
 	})
 }
 
+function toToolCallMetadataSSEChunk(payload: ToolCallMetadataPayload): string {
+	return formatSSEEvent('tool_call_metadata', {
+		toolCallId: payload.toolCallId,
+		runId: payload.runId,
+		parentRunId: payload.parentRunId,
+		agentType: payload.agentType,
+		title: payload.title,
+		conversationId: payload.conversationId,
+	})
+}
+
 function createSSEStream(
 	providerRouter: ProviderRouter,
 	toolRegistry: ToolRegistry,
@@ -124,6 +151,7 @@ function createSSEStream(
 	request: z.infer<typeof chatRequestSchema>,
 	runContext: RunContext,
 	abortController: AbortController,
+	runDeps?: ConversationRouteDeps,
 ): ReadableStream<Uint8Array> {
 	const signal = abortController.signal
 	let keepaliveTimer: ReturnType<typeof setInterval> | null = null
@@ -163,6 +191,24 @@ function createSSEStream(
 				encodeSSEChunk(controller, toQuestionSSEChunk(payload))
 			}
 
+			const metadataEmitter = createMetadataEmitter(runContext.runId, (payload) => {
+				encodeSSEChunk(controller, toToolCallMetadataSSEChunk(payload))
+			})
+
+			const activeRegistry =
+				runDeps && request.projectId
+					? createToolRegistryForRun({
+						hookRegistry,
+						database: runDeps.database,
+						runRegistry: runDeps.runRegistry,
+						sseManager: runDeps.sseManager,
+						providerRouter,
+						configManager: runDeps.configManager,
+						currentRun: runContext,
+						metadataEmitter,
+					})
+					: toolRegistry
+
 			void (async () => {
 				try {
 					await emit(hookRegistry, 'stream:start', {
@@ -171,9 +217,9 @@ function createSSEStream(
 						conversationId: runContext.runId,
 					})
 
-					const agentLoop = runAgentLoop(providerRouter, toolRegistry, {
+					const agentLoop = runAgentLoop(providerRouter, activeRegistry, {
 						messages: toMessageArray(request.messages),
-						tools: toolRegistry.getAll(),
+						tools: activeRegistry.getAll(),
 						provider: request.provider,
 						maxIterations: request.maxIterations,
 						maxTokens: request.maxTokens,
@@ -186,6 +232,7 @@ function createSSEStream(
 							signal,
 						},
 						questionEmitter,
+						metadataEmitter,
 					})
 
 					for await (const streamEvent of agentLoop) {
@@ -285,29 +332,14 @@ export function createConversationRoute<TApp extends Elysia>(
 			signal: abortController.signal,
 		}
 
-		// Use the per-run registry (includes task + agent_session_search) when the
-		// desktop supplies a real projectId. Fall back to the static registry
-		// for CLI/API callers that don't have a project context.
-		const activeRegistry =
-			runDeps && parsed.data.projectId
-				? createToolRegistryForRun({
-						hookRegistry,
-						database: runDeps.database,
-						runRegistry: runDeps.runRegistry,
-						sseManager: runDeps.sseManager,
-						providerRouter,
-						configManager: runDeps.configManager,
-						currentRun: runContext,
-					})
-				: toolRegistry
-
 		const stream = createSSEStream(
 			providerRouter,
-			activeRegistry,
+			toolRegistry,
 			hookRegistry,
 			parsed.data,
 			runContext,
 			abortController,
+			runDeps,
 		)
 		return new Response(stream, {
 			headers: SSE_HEADERS,

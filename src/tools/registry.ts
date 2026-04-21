@@ -19,6 +19,7 @@ import { readTool } from './read.js';
 import { bashTool } from './shell/index.js';
 import { skillTool } from './skill/index.js';
 import { createTaskTool, type TaskToolDeps } from './task/index.js';
+import type { MetadataEmitter } from './task/metadata-emitter.js';
 import { todoreadTool, todowriteTool } from './todo/index.js';
 import { createToolListTool } from './tool_list/index.js';
 import { webfetchTool } from './webfetch.js';
@@ -196,6 +197,7 @@ export interface ToolRegistryRunDeps {
 	providerRouter: ProviderRouter
 	configManager: ConfigManager
 	currentRun: RunContext
+	metadataEmitter?: MetadataEmitter
 }
 
 export function createToolRegistryForRun(deps: ToolRegistryRunDeps): ToolRegistry {
@@ -227,6 +229,7 @@ export function createToolRegistryForRun(deps: ToolRegistryRunDeps): ToolRegistr
 		configManager: deps.configManager,
 		toolRegistry: registry,
 		currentRun: deps.currentRun,
+		metadataEmitter: deps.metadataEmitter,
 	}
 	registry.register(createTaskTool(taskToolDeps))
 

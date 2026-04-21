@@ -11,6 +11,7 @@ import type { RunContext } from '../../runs/types.js'
 import { runAgentLoop } from '../../server/agent-loop.js'
 import { createQuestionEmitter } from '../question/emitter.js'
 import type { ToolRegistry } from '../registry.js'
+import type { MetadataEmitter } from './metadata-emitter.js'
 import type { ElefantError } from '../../types/errors.js'
 import type { Message } from '../../types/providers.js'
 import { err, ok, type Result } from '../../types/result.js'
@@ -26,6 +27,7 @@ export interface TaskToolDeps {
 	configManager: ConfigManager
 	toolRegistry: ToolRegistry
 	currentRun: RunContext
+	metadataEmitter?: MetadataEmitter
 }
 
 export interface TaskParams {
@@ -272,6 +274,14 @@ Use agent_session_search to query the child's full message history by runId.`,
 					title: params.description,
 					__sessionId: currentRun.sessionId,
 				} as unknown as Parameters<typeof publishToolCallMetadata>[2])
+
+				deps.metadataEmitter?.({
+					toolCallId: params._toolCallId,
+					runId: childRunId,
+					parentRunId: currentRun.runId,
+					agentType: params.agent_type,
+					title: params.description,
+				})
 			}
 
 			const startedAt = Date.now()
