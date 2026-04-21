@@ -2,18 +2,19 @@
 	// TaskToolCard — chat-surface adapter that renders an `AgentTaskCard`
 	// for `task` tool calls in the assistant transcript.
 	//
-	// The chat surface only sees a `ToolCallDisplay` (id, name, arguments,
-	// result) — it does NOT carry the parent run id or a direct child
-	// runId pointer. The agent-runs store is the source of truth for
-	// every spawned child run in the project, so we resolve the child
-	// reactively by matching the spawned run's `title` against the
-	// `description` argument the model passed to `task`.
+	// The chat surface receives a `ToolCallDisplay` (id, name, arguments,
+	// result, and optional metadata). Resolution precedence for every
+	// field the card needs is documented in `task-tool-card-state.ts`:
 	//
-	// This mirrors the proven title-match fallback used by
-	// `agent-run-transcript-blocks.ts` for `task` blocks in
-	// AgentRunTranscript: when daemon-side metadata routing isn't
-	// available in the local context, the (description → spawned title)
-	// pairing is the next best deterministic key.
+	//   - runId:      tool_call_metadata (primary) → title-match fallback
+	//   - title:      arguments.description (primary) → metadata.title
+	//   - agentType:  arguments.agent_type (primary) → metadata.agentType
+	//
+	// Metadata is patched onto the tool call by
+	// `chatStore.patchToolCallMetadata` whenever a `tool_call_metadata`
+	// SSE event arrives; this is the daemon's authoritative runId
+	// announcement at spawn time. The title-match fallback is retained
+	// for replayed sessions and slow-arrival metadata.
 
 	import { agentRunsStore } from '$lib/stores/agent-runs.svelte.js';
 	import { navigationStore } from '$lib/stores/navigation.svelte.js';
@@ -33,10 +34,11 @@
 	const description = $derived(extractTaskDescription(toolCall));
 	const agentType = $derived(extractTaskAgentType(toolCall));
 
-	// Re-runs whenever `agentRunsStore.runs` changes — i.e. as soon as
-	// the matching `agent_run.spawned` SSE event lands.
+	// Re-runs whenever `toolCall.metadata` is patched in by
+	// `chatStore.patchToolCallMetadata` (primary path) or when
+	// `agentRunsStore.runs` gains a matching-title row (fallback).
 	const resolvedRunId = $derived.by<string | null>(() =>
-		resolveTaskToolCardChildRunId(description, agentRunsStore.runs),
+		resolveTaskToolCardChildRunId(toolCall, agentRunsStore.runs),
 	);
 
 	function handleOpenChildRun(runId: string): void {

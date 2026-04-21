@@ -97,10 +97,26 @@
 				if (event.type === 'token') {
 					chatStore.appendToken(event.text);
 				} else if (event.type === 'tool_call') {
+					// Early announcement — name + id, arguments may be empty.
+					// The card renders immediately and shows a spinner.
 					chatStore.addToolCall({
 						id: event.id,
 						name: event.name,
 						arguments: event.arguments,
+					});
+				} else if (event.type === 'tool_call_update') {
+					// Arguments are now fully streamed — patch the existing card
+					// so TaskToolCard (and others) can render their full state.
+					chatStore.updateToolCallArguments(event.id, event.arguments);
+				} else if (event.type === 'tool_call_metadata') {
+					// Daemon-supplied runId/title/agentType for a just-spawned
+					// child run. TaskToolCard reads `metadata.runId` to resolve
+					// its child deterministically — no title-match needed.
+					chatStore.patchToolCallMetadata(event.toolCallId, {
+						runId: event.runId,
+						agentType: event.agentType,
+						title: event.title,
+						parentRunId: event.parentRunId,
 					});
 				} else if (event.type === 'tool_result') {
 					chatStore.addToolResult(event.toolCallId, event.content, event.isError);

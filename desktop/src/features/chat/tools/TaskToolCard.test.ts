@@ -76,9 +76,12 @@ const indexById = (runs: AgentRun[]): Record<string, AgentRun> => {
 
 // ─── (a) Placeholder branch ──────────────────────────────────────────────────
 
-describe('TaskToolCard — placeholder branch (no matching run)', () => {
-	it('returns null when the store is empty (renders "Starting…" placeholder)', () => {
-		const resolved = resolveTaskToolCardChildRunId('Refactor auth', {});
+describe('TaskToolCard — placeholder branch (no matching run, no metadata)', () => {
+	it('returns null when the store is empty and metadata is absent', () => {
+		const resolved = resolveTaskToolCardChildRunId(
+			makeToolCall({ description: 'Refactor auth' }),
+			{},
+		);
 		expect(resolved).toBeNull();
 	});
 
@@ -87,29 +90,89 @@ describe('TaskToolCard — placeholder branch (no matching run)', () => {
 			makeRun({ runId: 'r-1', title: 'Other task' }),
 			makeRun({ runId: 'r-2', title: 'Different work' }),
 		]);
-		const resolved = resolveTaskToolCardChildRunId('Refactor auth', runs);
+		const resolved = resolveTaskToolCardChildRunId(
+			makeToolCall({ description: 'Refactor auth' }),
+			runs,
+		);
 		expect(resolved).toBeNull();
 	});
 
-	it('never matches when description is empty (guard against titleless runs)', () => {
+	it('never matches when description is empty and no metadata is present', () => {
 		// Defensive: a run with an empty title must not collide with a
-		// tool call whose description has not arrived yet.
+		// tool call whose description has not arrived yet and carries
+		// no daemon metadata.
 		const runs = indexById([makeRun({ runId: 'r-1', title: '' })]);
-		const resolved = resolveTaskToolCardChildRunId('', runs);
+		const resolved = resolveTaskToolCardChildRunId(makeToolCall({}), runs);
 		expect(resolved).toBeNull();
 	});
 });
 
-// ─── (b) Resolved-run branch ─────────────────────────────────────────────────
+// ─── (b) Metadata-first resolution (primary path) ────────────────────────────
 
-describe('TaskToolCard — resolved-run branch (title match)', () => {
+describe('TaskToolCard — metadata-first resolution (tool_call_metadata event)', () => {
+	const META = {
+		runId: 'run-from-daemon',
+		agentType: 'executor',
+		title: 'Refactor auth',
+	};
+
+	it('resolves runId from toolCall.metadata.runId without touching the store', () => {
+		const toolCall = makeToolCall({}, { metadata: { ...META } });
+		// Empty store proves the title-match fallback is not needed.
+		expect(resolveTaskToolCardChildRunId(toolCall, {})).toBe('run-from-daemon');
+	});
+
+	it('metadata runId wins over a conflicting title-match in the store', () => {
+		// Two distinct runs carry the same title (a hypothetical
+		// collision). The daemon-supplied metadata must win so the
+		// card navigates to the run the daemon actually spawned.
+		const runs = indexById([
+			makeRun({ runId: 'r-collision', title: 'Refactor auth' }),
+		]);
+		const toolCall = makeToolCall(
+			{ description: 'Refactor auth' },
+			{ metadata: { ...META, runId: 'run-from-daemon' } },
+		);
+		expect(resolveTaskToolCardChildRunId(toolCall, runs)).toBe(
+			'run-from-daemon',
+		);
+	});
+
+	it('falls back to title-match when metadata is absent (replay / slow arrival)', () => {
+		// Replayed sessions don't re-emit tool_call_metadata, and the
+		// project SSE can hydrate the runs store before the chat SSE
+		// delivers the metadata frame. The fallback must still work.
+		const runs = indexById([
+			makeRun({ runId: 'r-fallback', title: 'Refactor auth' }),
+		]);
+		const toolCall = makeToolCall({ description: 'Refactor auth' });
+		expect(resolveTaskToolCardChildRunId(toolCall, runs)).toBe('r-fallback');
+	});
+
+	it('ignores empty metadata.runId and falls through to title-match', () => {
+		// Defensive: a malformed metadata event with an empty runId
+		// should not "win" over a valid title-match.
+		const runs = indexById([
+			makeRun({ runId: 'r-fallback', title: 'Refactor auth' }),
+		]);
+		const toolCall = makeToolCall(
+			{ description: 'Refactor auth' },
+			{ metadata: { ...META, runId: '' } },
+		);
+		expect(resolveTaskToolCardChildRunId(toolCall, runs)).toBe('r-fallback');
+	});
+});
+
+// ─── (c) Title-match fallback branch ─────────────────────────────────────────
+
+describe('TaskToolCard — title-match fallback (no metadata)', () => {
 	it('resolves to the runId of the run whose title matches the description', () => {
 		const runs = indexById([
 			makeRun({ runId: 'r-other', title: 'Different work' }),
 			makeRun({ runId: 'r-target', title: 'Refactor auth' }),
 		]);
-		const resolved = resolveTaskToolCardChildRunId('Refactor auth', runs);
-		expect(resolved).toBe('r-target');
+		const toolCall = makeToolCall({ description: 'Refactor auth' });
+		expect(resolveTaskToolCardChildRunId(toolCall, runs)).toBe('r-target');
 	});
 
 	it('resolves correctly across the full run lifecycle (running, done, error)', () => {
@@ -120,8 +183,8 @@ describe('TaskToolCard — resolved-run branch (title match)', () => {
 			const runs = indexById([
 				makeRun({ runId: 'r-x', title: 'Refactor auth', status }),
 			]);
-			const resolved = resolveTaskToolCardChildRunId('Refactor auth', runs);
-			expect(resolved).toBe('r-x');
+			const toolCall = makeToolCall({ description: 'Refactor auth' });
+			expect(resolveTaskToolCardChildRunId(toolCall, runs)).toBe('r-x');
 		}
 	});
 
@@ -135,12 +198,12 @@ describe('TaskToolCard — resolved-run branch (title match)', () => {
 			makeRun({ runId: 'r-first', title: 'Refactor auth' }),
 			makeRun({ runId: 'r-second', title: 'Refactor auth' }),
 		]);
-		const resolved = resolveTaskToolCardChildRunId('Refactor auth', runs);
-		expect(resolved).toBe('r-first');
+		const toolCall = makeToolCall({ description: 'Refactor auth' });
+		expect(resolveTaskToolCardChildRunId(toolCall, runs)).toBe('r-first');
 	});
 });
 
-// ─── (c) Prop pass-through to AgentTaskCard ──────────────────────────────────
+// ─── (d) Prop pass-through to AgentTaskCard ──────────────────────────────────
 
 describe('TaskToolCard — passes description and agentType through to AgentTaskCard', () => {
 	it('extracts the description string from tool-call arguments', () => {
@@ -159,10 +222,62 @@ describe('TaskToolCard — passes description and agentType through to AgentTask
 		expect(extractTaskAgentType(toolCall)).toBe('executor');
 	});
 
-	it('falls back to a safe blank description when arguments are mid-stream', () => {
-		// While the model is still emitting tool-call JSON, `arguments`
-		// can be empty. The placeholder branch needs an empty string
-		// (not undefined) so the optional-chain reads don't throw.
+	it('falls back to metadata.title when arguments.description is absent', () => {
+		// Mid-stream arguments can be empty even after metadata has
+		// landed (metadata arrives at spawn time, independent of
+		// JSON streaming). Surface the metadata title so the card
+		// has a label to render.
+		const toolCall = makeToolCall(
+			{},
+			{
+				metadata: {
+					runId: 'r-1',
+					agentType: 'executor',
+					title: 'Refactor auth',
+				},
+			},
+		);
+		expect(extractTaskDescription(toolCall)).toBe('Refactor auth');
+	});
+
+	it('falls back to metadata.agentType when arguments.agent_type is absent', () => {
+		const toolCall = makeToolCall(
+			{},
+			{
+				metadata: {
+					runId: 'r-1',
+					agentType: 'researcher',
+					title: 'Refactor auth',
+				},
+			},
+		);
+		expect(extractTaskAgentType(toolCall)).toBe('researcher');
+	});
+
+	it('arguments win over metadata when both are present', () => {
+		// Arguments reflect the exact model-emitted text and stay in
+		// sync with the transcript. Metadata mirrors the same values
+		// in practice, but on the rare occasion they diverge (e.g.
+		// testing) the arguments are the user-visible source of truth.
+		const toolCall = makeToolCall(
+			{ description: 'Args title', agent_type: 'executor' },
+			{
+				metadata: {
+					runId: 'r-1',
+					agentType: 'researcher',
+					title: 'Meta title',
+				},
+			},
+		);
+		expect(extractTaskDescription(toolCall)).toBe('Args title');
+		expect(extractTaskAgentType(toolCall)).toBe('executor');
+	});
+
+	it('falls back to a safe blank description when arguments are mid-stream and no metadata', () => {
+		// While the model is still emitting tool-call JSON and the
+		// metadata event has not yet landed, the placeholder branch
+		// needs an empty string (not undefined) so the optional-chain
+		// reads don't throw.
 		expect(extractTaskDescription(makeToolCall({}))).toBe('');
 		expect(extractTaskDescription(makeToolCall({ description: 42 }))).toBe('');
 		expect(
@@ -170,7 +285,7 @@ describe('TaskToolCard — passes description and agentType through to AgentTask
 		).toBe('');
 	});
 
-	it('falls back to "agent" when agent_type is missing or not a string', () => {
+	it('falls back to "agent" when both arguments and metadata are missing agent_type', () => {
 		// AgentTaskCard's icon/aria-label remain sensible mid-stream
 		// thanks to this default.
 		expect(extractTaskAgentType(makeToolCall({}))).toBe(DEFAULT_AGENT_TYPE);
