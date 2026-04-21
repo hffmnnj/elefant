@@ -189,4 +189,48 @@ describe('createConversationRoute', () => {
 		expect(receivedOptions?.topP).toBe(0.9)
 		expect(receivedOptions?.timeoutMs).toBe(30000)
 	})
+
+	it('emits tool_call event with full arguments (not empty)', async () => {
+		// This test verifies the SSE mapping: tool_call_complete -> tool_call
+		// The agent loop yields tool_call_complete after executing tools, and
+		// conversation.ts maps it to a tool_call SSE event with full arguments.
+		// Note: Full integration testing of the metadataEmitter path is covered
+		// in src/tools/task/task.test.ts ('calls metadataEmitter callback').
+		const adapter: ProviderAdapter = {
+			name: 'mock-provider',
+			async *sendMessage(): AsyncGenerator<StreamEvent> {
+				// Simulate the agent loop yielding tool_call_complete after tool execution
+				yield {
+					type: 'tool_call_complete',
+					toolCall: {
+						id: 'call-123',
+						name: 'task',
+						arguments: { description: 'test task', agent_type: 'researcher' },
+					},
+				}
+				// Must use finishReason: 'tool_calls' for the agent loop to process tools
+				yield { type: 'done', finishReason: 'tool_calls' }
+			},
+		}
+
+		const router = createMockRouter({ ok: true, data: adapter })
+		const app = createAppWithRouter(router)
+
+		const response = await app.handle(
+			createJsonRequest({
+				messages: [{ role: 'user', content: 'Run a task' }],
+			}),
+		)
+
+		expect(response.status).toBe(200)
+
+		const responseText = await response.text()
+		// The tool_call event should contain full arguments, not empty {}
+		// This verifies the fix that removed the broken tool_call_start workaround
+		expect(responseText).toContain('event: tool_call')
+		expect(responseText).toContain('"id":"call-123"')
+		expect(responseText).toContain('"name":"task"')
+		expect(responseText).toContain('"description":"test task"')
+		expect(responseText).toContain('"agent_type":"researcher"')
+	})
 })

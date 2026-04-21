@@ -524,6 +524,61 @@ describe('createTaskTool', () => {
 		database.close()
 	})
 
+	it('calls metadataEmitter callback when provided in deps', async () => {
+		const mockSpy = mockRunAgentLoop([{ type: 'done' }])
+
+		const { deps, database } = buildDeps()
+		const metadataCalls: Array<{
+			toolCallId: string
+			runId: string
+			parentRunId?: string
+			agentType: string
+			title: string
+		}> = []
+
+		const capturingMetadataEmitter = (payload: {
+			toolCallId: string
+			runId: string
+			parentRunId?: string
+			agentType: string
+			title: string
+		}): void => {
+			metadataCalls.push(payload)
+		}
+
+		const depsWithEmitter: typeof deps = {
+			...deps,
+			metadataEmitter: capturingMetadataEmitter,
+		}
+
+		const tool = createTaskTool(depsWithEmitter)
+
+		const result = await tool.execute({
+			description: 'emitter callback test',
+			prompt: 'do something',
+			agent_type: 'executor',
+			_toolCallId: 'tool-call-emitter-456',
+		} as unknown as Parameters<typeof tool.execute>[0])
+
+		expect(result.ok).toBe(true)
+		if (!result.ok) return
+
+		const payload = JSON.parse(result.data) as { runId: string }
+
+		// metadataEmitter should be called exactly once
+		expect(metadataCalls).toHaveLength(1)
+
+		const emitted = metadataCalls[0]
+		expect(emitted.toolCallId).toBe('tool-call-emitter-456')
+		expect(emitted.runId).toBe(payload.runId)
+		expect(emitted.parentRunId).toBe('parent-run-id')
+		expect(emitted.agentType).toBe('executor')
+		expect(emitted.title).toBe('emitter callback test')
+
+		mockSpy.mockRestore()
+		database.close()
+	})
+
 	it('does not publish agent_run.tool_call_metadata when depth validation rejects spawn', async () => {
 		const { deps, publishedEvents, database } = buildDeps({ currentDepth: 4 })
 		const tool = createTaskTool(deps)
