@@ -42,6 +42,7 @@
 	);
 
 	function handleOpenChildRun(runId: string): void {
+		console.debug('[TaskToolCard] openChildRun', { runId, metadata: toolCall.metadata, resolvedRunId });
 		navigationStore.openChildRun(runId);
 	}
 </script>
