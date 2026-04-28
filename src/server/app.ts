@@ -15,6 +15,7 @@ import { RunRegistry } from '../runs/registry.ts'
 import { mountAgentRunRoutes } from '../runs/routes.ts'
 import { mountWorktreeRoutes } from '../worktree/routes.ts'
 import { createConfigRoutes } from './config-routes.ts'
+import { gracefulShutdown } from '../daemon/shutdown.ts'
 
 export function createApp(
 	providerRouter: ProviderRouter,
@@ -79,6 +80,16 @@ export function createApp(
 			uptime: process.uptime(),
 			timestamp: new Date().toISOString(),
 		}))
+
+	// Graceful shutdown endpoint — called by the desktop app's daemon
+	// management panel. Responds immediately with 200 then exits the process
+	// so the HTTP response has time to reach the client before the socket closes.
+	app.post('/api/daemon/shutdown', () => {
+		setTimeout(() => {
+			void gracefulShutdown('manual')
+		}, 50)
+		return { ok: true, message: 'Shutting down' }
+	})
 
 	// Register question tool route for HITL interactions
 	registerQuestionRoute(app as unknown as Elysia)
