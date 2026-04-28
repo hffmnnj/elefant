@@ -1,6 +1,7 @@
 import type { ChatMessage, ContentBlock, ToolCallDisplay } from './types.js';
 import type { QuestionEvent } from '$lib/daemon/types.js';
 import type { AgentRunOverride } from '$lib/types/agent-config.js';
+import { getDaemonClient } from '$lib/daemon/client.js';
 import {
 	saveSessionHistory,
 	loadSessionHistory as loadFromStore,
@@ -249,16 +250,60 @@ export function clearConversation(): void {
 }
 
 /**
- * Load session history from local Tauri Store and populate the messages array.
- * Chat sessions are never persisted to the daemon DB, so we use our own store.
+ * Map daemon MessageRow records into ChatMessage display objects.
+ * Only user and assistant roles are rendered; tool_call/tool_result/system are dropped.
  */
-export async function loadSessionHistory(_projectId: string, sessionId: string): Promise<void> {
+function mapDaemonMessages(rows: Array<{
+	id: number; role: string; content: string; created_at: string;
+}>): ChatMessage[] {
+	return rows
+		.filter((r) => r.role === 'user' || r.role === 'assistant')
+		.map((r) => ({
+			id: String(r.id),
+			role: r.role as 'user' | 'assistant',
+			content: r.content,
+			timestamp: new Date(r.created_at),
+			...(r.role === 'assistant'
+				? { blocks: [{ type: 'text' as const, text: r.content }] }
+				: {}),
+		}));
+}
+
+/**
+ * Load session history and populate the messages array.
+ *
+ * Strategy (in order):
+ * 1. Tauri Store — for sessions that have been active since persistence
+ *    was added. Fast, works offline.
+ * 2. Daemon DB — for older sessions. Fetches root-level agent run
+ *    messages (user + assistant only) from the daemon API.
+ */
+export async function loadSessionHistory(projectId: string, sessionId: string): Promise<void> {
 	activeSessionId = sessionId;
+
+	// Strategy 1: local Tauri Store
 	try {
-		const loaded = await loadFromStore(sessionId);
-		messages = loaded;
+		const stored = await loadFromStore(sessionId);
+		if (stored.length > 0) {
+			messages = stored;
+			return;
+		}
+	} catch {
+		// Fall through to daemon
+	}
+
+	// Strategy 2: daemon DB (root runs only — no child agent runs)
+	try {
+		const client = getDaemonClient();
+		const rows = await client.fetchSessionMessages(projectId, sessionId);
+		const mapped = mapDaemonMessages(rows);
+		if (mapped.length > 0) {
+			messages = mapped;
+			// Backfill the Tauri Store so next load is instant
+			void saveSessionHistory(sessionId, mapped);
+		}
 	} catch (err) {
-		console.error('[chatStore] loadSessionHistory failed:', err);
+		console.error('[chatStore] loadSessionHistory daemon fallback failed:', err);
 	}
 }
 
