@@ -91,12 +91,25 @@ export async function startDaemon(): Promise<void> {
 	if (!cachedEntryPath) {
 		throw new Error('Cannot locate daemon entry point. Is the daemon process running?');
 	}
+
+	// Use spawn() not execute() — the daemon runs forever so execute() would
+	// block until Tauri kills it. spawn() fires-and-forgets the process.
 	const command = Command.create('bun', [cachedEntryPath]);
-	const output = await command.execute();
-	if (output.code !== null && output.code !== 0) {
-		const msg = (output.stderr || output.stdout).trim();
-		throw new Error(`Daemon failed to start (exit ${output.code}): ${msg}`);
+	await command.spawn();
+
+	// Poll /health until the daemon is accepting connections (up to 10s).
+	const deadline = Date.now() + 10_000;
+	while (Date.now() < deadline) {
+		await new Promise<void>((r) => setTimeout(r, 400));
+		try {
+			const client = getDaemonClient();
+			const health = await client.checkHealth();
+			if (health.ok) return; // up
+		} catch {
+			// not yet
+		}
 	}
+	throw new Error('Daemon did not respond within 10 seconds of starting.');
 }
 
 export async function restartDaemon(): Promise<void> {
