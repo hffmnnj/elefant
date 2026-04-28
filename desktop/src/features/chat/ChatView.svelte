@@ -46,6 +46,9 @@
 		if (current !== _lastSessionId) {
 			_lastSessionId = current;
 
+			// Track the active session so finalizeMessage knows where to persist.
+			chatStore.setActiveSession(current);
+
 			// Stop any in-flight stream before clearing
 			if (abortController) {
 				abortController.abort();

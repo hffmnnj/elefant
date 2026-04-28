@@ -1,8 +1,10 @@
 import type { ChatMessage, ContentBlock, ToolCallDisplay } from './types.js';
 import type { QuestionEvent } from '$lib/daemon/types.js';
 import type { AgentRunOverride } from '$lib/types/agent-config.js';
-import { getDaemonClient } from '$lib/daemon/client.js';
-import type { MessageRow } from '$lib/daemon/client.js';
+import {
+	saveSessionHistory,
+	loadSessionHistory as loadFromStore,
+} from '$lib/services/chat-history.js';
 
 function generateId(): string {
 	return `msg-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
@@ -13,6 +15,8 @@ let messages = $state<ChatMessage[]>([]);
 let isStreaming = $state(false);
 let streamingMessageId = $state<string | null>(null);
 let selectedProvider = $state<string | null>(null);
+// Tracked so finalizeMessage can auto-persist without needing an extra param.
+let activeSessionId = $state<string | null>(null);
 let maxIterations = $state(50);
 let maxTokens = $state(4096);
 let temperature = $state(1.0);
@@ -218,6 +222,12 @@ export function finalizeMessage(_finishReason: string): void {
 
 	streamingMessageId = null;
 	isStreaming = false;
+
+	// Persist after every completed turn so session restore always has
+	// up-to-date history. Fire-and-forget — never block the UI.
+	if (activeSessionId) {
+		void saveSessionHistory(activeSessionId, messages);
+	}
 }
 
 export function setStreamingError(error: string): void {
@@ -239,42 +249,16 @@ export function clearConversation(): void {
 }
 
 /**
- * Map daemon MessageRow records to ChatMessage objects for the UI.
- * Filters out system messages and converts assistant messages with text blocks.
+ * Load session history from local Tauri Store and populate the messages array.
+ * Chat sessions are never persisted to the daemon DB, so we use our own store.
  */
-export function mapMessageRowsToChat(rows: MessageRow[]): ChatMessage[] {
-	return rows
-		.filter((row) => row.role === 'user' || row.role === 'assistant')
-		.map((row) => {
-			const base = {
-				id: String(row.id),
-				content: row.content,
-				timestamp: new Date(row.created_at),
-			};
-			if (row.role === 'user') {
-				return { ...base, role: 'user' as const };
-			}
-			return {
-				...base,
-				role: 'assistant' as const,
-				blocks: [{ type: 'text' as const, text: row.content }],
-			};
-		});
-}
-
-/**
- * Load session history from the daemon and populate the messages array.
- * On error, messages remain empty (empty state will show).
- */
-export async function loadSessionHistory(projectId: string, sessionId: string): Promise<void> {
-	const client = getDaemonClient();
+export async function loadSessionHistory(_projectId: string, sessionId: string): Promise<void> {
+	activeSessionId = sessionId;
 	try {
-		const rows = await client.fetchSessionMessages(projectId, sessionId);
-		const mapped = mapMessageRowsToChat(rows);
-		messages = mapped;
+		const loaded = await loadFromStore(sessionId);
+		messages = loaded;
 	} catch (err) {
 		console.error('[chatStore] loadSessionHistory failed:', err);
-		// Leave messages empty — empty state will show
 	}
 }
 
@@ -383,6 +367,9 @@ export const chatStore = {
 	},
 	get hasAgentOverride() {
 		return hasAgentOverride();
+	},
+	setActiveSession: (id: string | null) => {
+		activeSessionId = id;
 	},
 	setProvider: (p: string | null) => {
 		selectedProvider = p;
