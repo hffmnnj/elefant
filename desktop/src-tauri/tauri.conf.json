@@ -46,7 +46,15 @@
   },
   "plugins": {
     "shell": {
-      "open": true
+      "open": true,
+      "scope": [
+        {
+          "name": "bun",
+          "cmd": "bun",
+          "args": true,
+          "sidecar": false
+        }
+      ]
     }
   }
 }
