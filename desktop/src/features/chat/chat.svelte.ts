@@ -244,7 +244,7 @@ export function clearConversation(): void {
  */
 export function mapMessageRowsToChat(rows: MessageRow[]): ChatMessage[] {
 	return rows
-		.filter((row) => row.role !== 'system')
+		.filter((row) => row.role === 'user' || row.role === 'assistant')
 		.map((row) => {
 			const base = {
 				id: String(row.id),
@@ -254,7 +254,6 @@ export function mapMessageRowsToChat(rows: MessageRow[]): ChatMessage[] {
 			if (row.role === 'user') {
 				return { ...base, role: 'user' as const };
 			}
-			// assistant
 			return {
 				...base,
 				role: 'assistant' as const,

@@ -167,12 +167,16 @@ export class DaemonClient {
 			? runsJson
 			: (runsJson as { ok: true; data: AgentRun[] }).data ?? [];
 
-		// Sort defensively by created_at (oldest first) for chronological message order
-		runs.sort((a, b) => a.created_at.localeCompare(b.created_at));
+		// Only fetch root-level runs (no parent). Child/sub-agent runs belong
+		// to their own view and must not be mixed into the main chat history.
+		const rootRuns = runs.filter((r) => r.parent_run_id === null);
 
-		// 2. For each run, fetch messages
+		// Sort defensively by created_at (oldest first) for chronological message order
+		rootRuns.sort((a, b) => a.created_at.localeCompare(b.created_at));
+
+		// 2. For each root run, fetch messages
 		const allMessages: MessageRow[] = [];
-		for (const run of runs) {
+		for (const run of rootRuns) {
 			const runId = run.run_id;
 			if (!runId) continue;
 
