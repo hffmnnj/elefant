@@ -6,6 +6,7 @@ import type { ElefantWsServer } from '../transport/ws-server.ts';
 import type { ElefantError } from '../types/errors.ts';
 import { err, ok, type Result } from '../types/result.ts';
 import { classify, DEFAULT_CLASSIFIER_RULES } from './classifier.ts';
+import { statusFromApproval } from './types.ts';
 import type {
 	ClassifierRule,
 	Decision,
@@ -22,7 +23,7 @@ interface ApprovalRequest {
 	requestId: string;
 	tool: string;
 	args: Record<string, unknown>;
-	risk: 'high';
+	risk: Risk;
 	conversationId: string;
 	timeoutMs: number;
 }
@@ -109,6 +110,7 @@ export class PermissionGate {
 			if (hookStatus === 'deny') {
 				decision = {
 					approved: false,
+					status: 'deny',
 					reason: hookCtx.reason ?? 'denied by permission hook',
 					risk,
 					source: 'hook',
@@ -116,13 +118,23 @@ export class PermissionGate {
 			} else if (hookStatus === 'allow') {
 				decision = {
 					approved: true,
+					status: 'allow',
 					reason: hookCtx.reason ?? 'approved by permission hook',
 					risk,
 					source: 'hook',
 				};
+			} else if (hookStatus === 'ask') {
+				decision = await this.resolveUserApproval(
+					tool,
+					args,
+					conversationId,
+					requestId,
+					risk,
+				);
 			} else if (risk === 'low') {
 				decision = {
 					approved: true,
+					status: 'allow',
 					reason: 'auto-approved (low risk)',
 					risk,
 					source: 'default',
@@ -133,21 +145,22 @@ export class PermissionGate {
 				);
 				decision = {
 					approved: true,
+					status: 'allow',
 					reason: 'auto-approved (medium risk, logged)',
 					risk,
 					source: 'default',
 				};
 			} else {
-				decision = await this.resolveHighRiskDecision(
+				decision = await this.resolveUserApproval(
 					tool,
 					args,
 					conversationId,
 					requestId,
+					risk,
 				);
 			}
 
-			const resolvedStatus =
-				hookStatus ?? (decision.approved ? 'allow' : 'deny');
+			const resolvedStatus = decision.status;
 			this.publishPermissionResolvedEvent(context, {
 				requestId,
 				status: resolvedStatus,
@@ -179,17 +192,19 @@ export class PermissionGate {
 		}
 	}
 
-	private async resolveHighRiskDecision(
+	private async resolveUserApproval(
 		tool: string,
 		args: Record<string, unknown>,
 		conversationId: string,
 		requestId: string,
+		risk: Risk,
 	): Promise<Decision> {
 		if (!this.ws) {
 			return {
 				approved: false,
-				reason: 'high-risk tool requires approval (no WebSocket available)',
-				risk: 'high',
+				status: 'deny',
+				reason: `${risk === 'high' ? 'high-risk' : 'ask'} tool requires approval (no WebSocket available)`,
+				risk,
 				source: 'default',
 			};
 		}
@@ -198,7 +213,7 @@ export class PermissionGate {
 			requestId,
 			tool,
 			args,
-			risk: 'high',
+			risk,
 			conversationId,
 			timeoutMs: this.timeoutMs,
 		};
@@ -210,9 +225,10 @@ export class PermissionGate {
 
 		return {
 			approved: result.approved,
+			status: statusFromApproval(result.approved),
 			reason:
 				result.reason ?? (result.approved ? 'user approved' : 'user denied'),
-			risk: 'high',
+			risk,
 			source: 'user',
 		};
 	}
@@ -340,6 +356,7 @@ export class PermissionGate {
 					args,
 					risk: decision.risk,
 					approved: decision.approved,
+					status: decision.status,
 					reason: decision.reason,
 					conversationId,
 				}),

@@ -14,4 +14,6 @@ export interface CompactionOutput {
   blocks: string[];
   tokenCountBefore: number;
   tokenCountAfter: number;
+  didCompact?: boolean;
+  skipReason?: 'pending_tool_call' | 'hook_cancelled';
 }

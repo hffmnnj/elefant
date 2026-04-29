@@ -57,7 +57,9 @@ describe('PermissionGate', () => {
 		expect(result.ok).toBe(true);
 		if (result.ok) {
 			expect(result.data.approved).toBe(true);
+			expect(result.data.status).toBe('allow');
 			expect(result.data.risk).toBe('low');
+			expect(result.data.source).toBe('default');
 		}
 
 		expect(ws.requestApproval).toHaveBeenCalledTimes(0);
@@ -77,6 +79,7 @@ describe('PermissionGate', () => {
 		expect(result.ok).toBe(true);
 		if (result.ok) {
 			expect(result.data.approved).toBe(true);
+			expect(result.data.status).toBe('allow');
 			expect(result.data.risk).toBe('medium');
 		}
 		expect(logSpy).toHaveBeenCalledTimes(1);
@@ -90,6 +93,7 @@ describe('PermissionGate', () => {
 		expect(result.ok).toBe(true);
 		if (result.ok) {
 			expect(result.data.approved).toBe(false);
+			expect(result.data.status).toBe('deny');
 			expect(result.data.risk).toBe('high');
 			expect(result.data.reason).toContain('requires approval');
 		}
@@ -110,6 +114,7 @@ describe('PermissionGate', () => {
 		expect(result.ok).toBe(true);
 		if (result.ok) {
 			expect(result.data.approved).toBe(true);
+			expect(result.data.status).toBe('allow');
 			expect(result.data.risk).toBe('high');
 		}
 		expect(ws.requestApproval).toHaveBeenCalledTimes(1);
@@ -130,6 +135,7 @@ describe('PermissionGate', () => {
 		expect(result.ok).toBe(true);
 		if (result.ok) {
 			expect(result.data.approved).toBe(false);
+			expect(result.data.status).toBe('deny');
 			expect(result.data.risk).toBe('high');
 		}
 		expect(ws.requestApproval).toHaveBeenCalledTimes(1);
@@ -195,6 +201,7 @@ describe('PermissionGate', () => {
 		expect(result.ok).toBe(true);
 		if (result.ok) {
 			expect(result.data.approved).toBe(false);
+			expect(result.data.status).toBe('deny');
 			expect(result.data.source).toBe('hook');
 			expect(result.data.reason).toBe('policy denied');
 		}
@@ -219,11 +226,101 @@ describe('PermissionGate', () => {
 		expect(result.ok).toBe(true);
 		if (result.ok) {
 			expect(result.data.approved).toBe(true);
+			expect(result.data.status).toBe('allow');
 			expect(result.data.source).toBe('hook');
 			expect(result.data.reason).toBe('policy allowed');
 		}
 
 		expect(ws.requestApproval).toHaveBeenCalledTimes(0);
+	});
+
+	it('routes hook ask for low-risk tools through WebSocket approval', async () => {
+		const hooks = new HookRegistry();
+		hooks.register('permission:ask', () => hookReturn('ask', 'plugin wants confirmation'));
+		const ws: MockWs = {
+			requestApproval: mock(async () => ({ approved: true, reason: 'approved by user' })),
+		};
+
+		const gate = new PermissionGate(
+			createContext(hooks),
+			ws as unknown as ElefantWsServer,
+		);
+
+		const result = await gate.check('read', { path: '/tmp/file.txt' }, 'conv-ask-allow');
+
+		expect(result.ok).toBe(true);
+		if (result.ok) {
+			expect(result.data.approved).toBe(true);
+			expect(result.data.status).toBe('allow');
+			expect(result.data.risk).toBe('low');
+			expect(result.data.source).toBe('user');
+		}
+		expect(ws.requestApproval).toHaveBeenCalledTimes(1);
+	});
+
+	it('denies hook ask for low-risk tools when WebSocket approval is denied', async () => {
+		const hooks = new HookRegistry();
+		hooks.register('permission:ask', () => hookReturn('ask', 'plugin wants confirmation'));
+		const ws: MockWs = {
+			requestApproval: mock(async () => ({ approved: false, reason: 'denied by user' })),
+		};
+
+		const gate = new PermissionGate(
+			createContext(hooks),
+			ws as unknown as ElefantWsServer,
+		);
+
+		const result = await gate.check('read', { path: '/tmp/file.txt' }, 'conv-ask-deny');
+
+		expect(result.ok).toBe(true);
+		if (result.ok) {
+			expect(result.data.approved).toBe(false);
+			expect(result.data.status).toBe('deny');
+			expect(result.data.risk).toBe('low');
+			expect(result.data.source).toBe('user');
+		}
+		expect(ws.requestApproval).toHaveBeenCalledTimes(1);
+	});
+
+	it('routes hook ask for high-risk tools through one WebSocket prompt', async () => {
+		const hooks = new HookRegistry();
+		hooks.register('permission:ask', () => hookReturn('ask', 'plugin wants confirmation'));
+		const ws: MockWs = {
+			requestApproval: mock(async () => ({ approved: true, reason: 'approved by user' })),
+		};
+
+		const gate = new PermissionGate(
+			createContext(hooks),
+			ws as unknown as ElefantWsServer,
+		);
+
+		const result = await gate.check('webfetch', { url: 'https://example.com' }, 'conv-ask-high');
+
+		expect(result.ok).toBe(true);
+		if (result.ok) {
+			expect(result.data.approved).toBe(true);
+			expect(result.data.status).toBe('allow');
+			expect(result.data.risk).toBe('high');
+			expect(result.data.source).toBe('user');
+		}
+		expect(ws.requestApproval).toHaveBeenCalledTimes(1);
+	});
+
+	it('fails closed when hook ask has no WebSocket available', async () => {
+		const hooks = new HookRegistry();
+		hooks.register('permission:ask', () => hookReturn('ask', 'plugin wants confirmation'));
+
+		const gate = new PermissionGate(createContext(hooks), null);
+		const result = await gate.check('read', { path: '/tmp/file.txt' }, 'conv-ask-nowebsocket');
+
+		expect(result.ok).toBe(true);
+		if (result.ok) {
+			expect(result.data.approved).toBe(false);
+			expect(result.data.status).toBe('deny');
+			expect(result.data.risk).toBe('low');
+			expect(result.data.source).toBe('default');
+			expect(result.data.reason).toContain('no WebSocket available');
+		}
 	});
 
 	it('routes to WebSocket approval flow when status is not set', async () => {
