@@ -81,11 +81,29 @@ export interface HookContextMap {
 		readonly projectId: string;
 		readonly totalTokens?: number;
 	};
+	'session:pre_compact': {
+		readonly messages: readonly Message[];
+		readonly tokenCount: number;
+		readonly contextWindow: number;
+		readonly sessionId: string;
+		readonly conversationId: string;
+	};
 	'session:compact': {
 		readonly messages: readonly import('../types/providers.ts').Message[];
 		readonly tokenCount: number;
 		readonly contextWindow: number;
 		readonly summary?: string;
+	};
+	'session:post_compact': {
+		readonly messagesBefore: readonly Message[];
+		readonly messagesAfter: readonly Message[];
+		readonly tokenCountBefore: number;
+		readonly tokenCountAfter: number;
+		readonly summary: string;
+		readonly didCompact: boolean;
+		readonly skipReason?: 'pending_tool_call' | 'hook_cancelled';
+		readonly sessionId: string;
+		readonly conversationId: string;
 	};
 	'context:transform': {
 		readonly system: string[];
@@ -148,7 +166,9 @@ export const HOOK_EVENT_NAMES: readonly HookEventName[] = [
 	'project:close',
 	'session:start',
 	'session:end',
+	'session:pre_compact',
 	'session:compact',
+	'session:post_compact',
 	'context:transform',
 	'system:transform',
 	'permission:ask',

@@ -4,9 +4,11 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import type { DaemonContext } from '../daemon/context.ts';
+import type { HookContextMap } from '../hooks/types.ts';
 import { Database } from '../db/database.ts';
 import { HookRegistry } from '../hooks/registry.ts';
 import { StateManager } from '../state/manager.ts';
+import type { Message } from '../types/providers.ts';
 import { CompactionManager } from './manager.ts';
 
 interface CompactionFixture {
@@ -78,6 +80,13 @@ function createFixture(): CompactionFixture {
   };
 }
 
+function createMessages(count: number): Message[] {
+  return Array.from({ length: count }, (_, index) => ({
+    role: index % 2 === 0 ? 'user' : 'assistant',
+    content: `message-${index}-${'x'.repeat(200)}`,
+  }));
+}
+
 describe('CompactionManager', () => {
   const fixtures: CompactionFixture[] = [];
 
@@ -106,10 +115,7 @@ describe('CompactionManager', () => {
     const fixture = createFixture();
     fixtures.push(fixture);
 
-    const messages = Array.from({ length: 20 }, (_, index) => ({
-      role: index % 2 === 0 ? 'user' : 'assistant',
-      content: `message-${index}-${'x'.repeat(200)}`,
-    }));
+    const messages = createMessages(20);
 
     const result = await fixture.manager.compact({
       messages,
@@ -123,6 +129,160 @@ describe('CompactionManager', () => {
     expect(result.blocks.length).toBeGreaterThan(0);
     expect(result.blocks.some((block) => block.includes('Workflow State'))).toBe(true);
     expect(result.blocks.some((block) => block.includes('Available Tools'))).toBe(true);
+    expect(result.didCompact).toBe(true);
+  });
+
+  it('compact skips and returns original messages when transcript ends mid-tool-call', async () => {
+    const fixture = createFixture();
+    fixtures.push(fixture);
+
+    const messages = [
+      { role: 'user', content: 'Inspect the repo' },
+      {
+        role: 'assistant',
+        content: 'Calling a tool',
+        toolCalls: [{ id: 'call-1', name: 'read', arguments: { file: 'README.md' } }],
+      },
+    ] satisfies Message[];
+
+    const postCompactEvents: HookContextMap['session:post_compact'][] = [];
+    fixture.hooks.register('session:post_compact', (context) => {
+      postCompactEvents.push(context);
+    });
+
+    const result = await fixture.manager.compact({
+      messages,
+      tokenCount: 180_000,
+      contextWindow: 200_000,
+      sessionId: fixture.sessionId,
+      conversationId: 'conv-pending-tool-call',
+    });
+
+    expect(result.messages).toBe(messages);
+    expect(result.messages.length).toBe(messages.length);
+    expect(result.summary).toContain('Compaction skipped');
+    expect(result.didCompact).toBe(false);
+    expect(result.skipReason).toBe('pending_tool_call');
+    expect(postCompactEvents).toHaveLength(1);
+    expect(postCompactEvents[0]!.messagesBefore.length).toBe(messages.length);
+    expect(postCompactEvents[0]!.messagesAfter.length).toBe(messages.length);
+    expect(postCompactEvents[0]!.didCompact).toBe(false);
+    expect(postCompactEvents[0]!.skipReason).toBe('pending_tool_call');
+  });
+
+  it('compact does not skip when a tool call has a paired tool result', async () => {
+    const fixture = createFixture();
+    fixtures.push(fixture);
+
+    const messages: Message[] = [
+      { role: 'user', content: 'Inspect the repo' },
+      {
+        role: 'assistant',
+        content: 'Calling a tool',
+        toolCalls: [{ id: 'call-1', name: 'read', arguments: { file: 'README.md' } }],
+      },
+      { role: 'tool', content: 'README contents', toolCallId: 'call-1' },
+      ...createMessages(17),
+    ];
+
+    const result = await fixture.manager.compact({
+      messages,
+      tokenCount: 180_000,
+      contextWindow: 200_000,
+      sessionId: fixture.sessionId,
+      conversationId: 'conv-paired-tool-call',
+    });
+
+    expect(result.messages.length).toBeLessThan(messages.length);
+    expect(result.didCompact).toBe(true);
+    expect(result.summary).not.toContain('Compaction skipped');
+  });
+
+  it('emits session:pre_compact before session:compact', async () => {
+    const fixture = createFixture();
+    fixtures.push(fixture);
+    const events: string[] = [];
+
+    fixture.hooks.register('session:pre_compact', () => {
+      events.push('session:pre_compact');
+    });
+    fixture.hooks.register('session:compact', () => {
+      events.push('session:compact');
+    });
+
+    await fixture.manager.compact({
+      messages: createMessages(12),
+      tokenCount: 180_000,
+      contextWindow: 200_000,
+      sessionId: fixture.sessionId,
+      conversationId: 'conv-order',
+    });
+
+    expect(events).toEqual(['session:pre_compact', 'session:compact']);
+  });
+
+  it('emits session:post_compact after successful compaction', async () => {
+    const fixture = createFixture();
+    fixtures.push(fixture);
+    const messages = createMessages(12);
+    const postCompactEvents: HookContextMap['session:post_compact'][] = [];
+
+    fixture.hooks.register('session:post_compact', (context) => {
+      postCompactEvents.push(context);
+    });
+
+    const result = await fixture.manager.compact({
+      messages,
+      tokenCount: 180_000,
+      contextWindow: 200_000,
+      sessionId: fixture.sessionId,
+      conversationId: 'conv-post-success',
+    });
+
+    expect(postCompactEvents).toHaveLength(1);
+    expect(postCompactEvents[0]!.didCompact).toBe(true);
+    expect(postCompactEvents[0]!.messagesBefore.length).toBe(messages.length);
+    expect(postCompactEvents[0]!.messagesAfter.length).toBe(result.messages.length);
+    expect(postCompactEvents[0]!.tokenCountBefore).toBe(180_000);
+    expect(postCompactEvents[0]!.tokenCountAfter).toBe(result.tokenCountAfter);
+    expect(postCompactEvents[0]!.summary).toBe(result.summary);
+  });
+
+  it('pre_compact cancel skips session:compact and emits post_compact skip', async () => {
+    const fixture = createFixture();
+    fixtures.push(fixture);
+    const events: string[] = [];
+    const messages = createMessages(12);
+    const postCompactEvents: HookContextMap['session:post_compact'][] = [];
+
+    fixture.hooks.register('session:pre_compact', () => {
+      events.push('session:pre_compact');
+      return { cancel: true };
+    });
+    fixture.hooks.register('session:compact', () => {
+      events.push('session:compact');
+    });
+    fixture.hooks.register('session:post_compact', (context) => {
+      events.push('session:post_compact');
+      postCompactEvents.push(context);
+    });
+
+    const result = await fixture.manager.compact({
+      messages,
+      tokenCount: 180_000,
+      contextWindow: 200_000,
+      sessionId: fixture.sessionId,
+      conversationId: 'conv-pre-cancel',
+    });
+
+    expect(events).toEqual(['session:pre_compact', 'session:post_compact']);
+    expect(result.messages).toBe(messages);
+    expect(result.summary).toContain('Compaction skipped');
+    expect(result.didCompact).toBe(false);
+    expect(result.skipReason).toBe('hook_cancelled');
+    expect(postCompactEvents).toHaveLength(1);
+    expect(postCompactEvents[0]!.didCompact).toBe(false);
+    expect(postCompactEvents[0]!.skipReason).toBe('hook_cancelled');
   });
 
   it('compact uses session:compact hook summary override when provided', async () => {

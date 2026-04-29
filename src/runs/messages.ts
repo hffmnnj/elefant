@@ -1,5 +1,5 @@
 import type { Database } from '../db/database.js'
-import type { ElefantError } from '../types/errors.js'
+import type { Message } from '../types/providers.ts'
 
 /**
  * Agent run message record from the database.
@@ -146,4 +146,26 @@ export function queryMessages(
 		tool_name: row.tool_name,
 		created_at: row.created_at,
 	}))
+}
+
+/**
+ * Returns true when the transcript ends with a tool invocation that has no
+ * following tool result yet.
+ */
+export function hasUnpairedToolCall(messages: readonly Message[]): boolean {
+	if (messages.length === 0) {
+		return false
+	}
+
+	const last = messages[messages.length - 1]
+	if (!last) {
+		return false
+	}
+
+	// Conservative P0 heuristic: inspect only the last persisted/runtime message.
+	if ((last.role as string) === 'tool_call') {
+		return true
+	}
+
+	return last.role === 'assistant' && Array.isArray(last.toolCalls) && last.toolCalls.length > 0
 }
