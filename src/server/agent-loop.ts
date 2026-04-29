@@ -266,17 +266,16 @@ export async function* runAgentLoop(
 			yield event
 		}
 
-		await emit(options.hookRegistry, 'message:after', {
-			messages,
-			provider: options.provider ?? 'default',
-			model: 'unknown',
-			durationMs: Date.now() - messageStart,
-			runId: options.runContext.runId,
-			sessionId: options.runContext.sessionId,
-			projectId: options.runContext.projectId,
-		})
-
 		if (pendingToolCalls.length === 0 || finishReason !== 'tool_calls') {
+			await emit(options.hookRegistry, 'message:after', {
+				messages,
+				provider: options.provider ?? 'default',
+				model: 'unknown',
+				durationMs: Date.now() - messageStart,
+				runId: options.runContext.runId,
+				sessionId: options.runContext.sessionId,
+				projectId: options.runContext.projectId,
+			})
 			return
 		}
 
@@ -352,6 +351,16 @@ export async function* runAgentLoop(
 		})
 		tokenCount = estimateMessageTokens(messages)
 		}
+
+		await emit(options.hookRegistry, 'message:after', {
+			messages,
+			provider: options.provider ?? 'default',
+			model: 'unknown',
+			durationMs: Date.now() - messageStart,
+			runId: options.runContext.runId,
+			sessionId: options.runContext.sessionId,
+			projectId: options.runContext.projectId,
+		})
 	}
 
 	yield {

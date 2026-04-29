@@ -255,12 +255,61 @@ describe('runAgentLoop', () => {
 
 		expect(fired).toEqual([
 			'message:before',
-			'message:after',
 			'tool:before',
 			'tool:after',
+			'message:after',
 			'message:before',
 			'message:after',
 		])
+	})
+
+	it('message:after receives messages including assistant and tool results', async () => {
+		const hooks = new HookRegistry()
+		const capturedMessages: Message[][] = []
+
+		hooks.register('message:after', async (payload) => {
+			capturedMessages.push([...payload.messages])
+		})
+
+		const adapter: ProviderAdapter = {
+			name: 'mock',
+			async *sendMessage(): AsyncGenerator<StreamEvent> {
+				yield {
+					type: 'tool_call_complete',
+					toolCall: {
+						id: 'call-1',
+						name: 'mock-tool',
+						arguments: { input: 'test' },
+					},
+				}
+				yield { type: 'done', finishReason: 'tool_calls' }
+			},
+		}
+
+		const registry: ToolExecutor = {
+			execute: async () => ({ ok: true, data: 'tool-output' }),
+		}
+
+		await collectEvents(
+			runAgentLoop(createRouter(adapter), registry, {
+				messages: [{ role: 'user', content: 'run tool' }],
+				tools: EMPTY_TOOLS,
+				hookRegistry: hooks,
+				runContext: createRunContext('conv-message-after-messages'),
+			}),
+		)
+
+		// Should have captured messages from the first turn's message:after
+		expect(capturedMessages.length).toBeGreaterThanOrEqual(1)
+
+		// The first message:after after tool processing should include:
+		// 1. Original user message
+		// 2. Assistant message with toolCalls
+		// 3. Tool result message
+		const firstCapture = capturedMessages[0]
+		expect(firstCapture.some((m) => m.role === 'user')).toBe(true)
+		expect(firstCapture.some((m) => m.role === 'assistant' && m.toolCalls && m.toolCalls.length > 0)).toBe(true)
+		expect(firstCapture.some((m) => m.role === 'tool' && m.toolCallId === 'call-1')).toBe(true)
 	})
 
 	it('keeps hook conversation ids isolated across parallel runs', async () => {
