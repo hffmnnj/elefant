@@ -107,7 +107,7 @@ describe('daemon integration (in-process)', () => {
 
 		expect(response.status).toBe(200)
 		const sseText = await response.text()
-		expect(sseText).toContain('event: tool_call\ndata: {"id":"call-1","name":"mock-tool","arguments":{"value":"abc"}}\n\n')
+		expect(sseText).toContain('event: tool_call_update\ndata: {"id":"call-1","name":"mock-tool","arguments":{"value":"abc"}}\n\n')
 		expect(sseText).toContain('event: tool_result\ndata: {"toolCallId":"call-1","content":"mock-result","isError":false}\n\n')
 		expect(sseText).toContain('event: token\ndata: {"text":"final answer"}\n\n')
 		expect(sseText).toContain('event: done\ndata: {"finishReason":"stop"}\n\n')
