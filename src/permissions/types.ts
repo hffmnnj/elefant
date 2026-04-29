@@ -6,9 +6,16 @@ export type PermissionDecisionSource = 'hook' | 'user' | 'default';
 
 export interface Decision {
 	approved: boolean;
+	status: PermissionDecisionStatus;
 	reason: string;
 	risk: Risk;
 	source: PermissionDecisionSource;
+}
+
+export function statusFromApproval(
+	approved: boolean,
+): PermissionDecisionStatus {
+	return approved ? 'allow' : 'deny';
 }
 
 export interface ClassifierRule {
