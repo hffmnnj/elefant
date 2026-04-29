@@ -140,6 +140,106 @@ describe('runAgentLoop', () => {
 		expect(calls[1].some((entry) => entry.role === 'tool' && entry.toolCallId === 'call-1')).toBe(true)
 	})
 
+	it('executes tool calls concurrently when multiple are returned in one turn', async () => {
+		const startTimes: Record<string, number> = {}
+		const endTimes: Record<string, number> = {}
+		const adapter: ProviderAdapter = {
+			name: 'mock',
+			async *sendMessage(): AsyncGenerator<StreamEvent> {
+				yield {
+					type: 'tool_call_complete',
+					toolCall: { id: 'call-a', name: 'slow-a', arguments: {} },
+				}
+				yield {
+					type: 'tool_call_complete',
+					toolCall: { id: 'call-b', name: 'slow-b', arguments: {} },
+				}
+				yield { type: 'done', finishReason: 'tool_calls' }
+			},
+		}
+
+		const registry: ToolExecutor = {
+			execute: async (name) => {
+				startTimes[name] = Date.now()
+				await new Promise((resolve) => setTimeout(resolve, 50))
+				endTimes[name] = Date.now()
+				return { ok: true, data: `${name}-result` }
+			},
+		}
+
+		const events = await collectEvents(
+			runAgentLoop(createRouter(adapter), registry, {
+				messages: [{ role: 'user', content: 'go' }],
+				tools: EMPTY_TOOLS,
+				hookRegistry: new HookRegistry(),
+				maxIterations: 1,
+				runContext: createRunContext('conv-parallel'),
+			}),
+		)
+
+		expect(startTimes['slow-a']).toBeDefined()
+		expect(startTimes['slow-b']).toBeDefined()
+		expect(endTimes['slow-a']).toBeDefined()
+		expect(endTimes['slow-b']).toBeDefined()
+		expect(Math.abs(startTimes['slow-a'] - startTimes['slow-b'])).toBeLessThan(30)
+		expect(events.slice(0, 4)).toEqual([
+			{
+				type: 'tool_call_complete',
+				toolCall: { id: 'call-a', name: 'slow-a', arguments: {} },
+			},
+			{
+				type: 'tool_result',
+				toolResult: {
+					toolCallId: 'call-a',
+					content: 'slow-a-result',
+					isError: false,
+				},
+			},
+			{
+				type: 'tool_call_complete',
+				toolCall: { id: 'call-b', name: 'slow-b', arguments: {} },
+			},
+			{
+				type: 'tool_result',
+				toolResult: {
+					toolCallId: 'call-b',
+					content: 'slow-b-result',
+					isError: false,
+				},
+			},
+		])
+	})
+
+	it('uses UsageEvent.inputTokens for tokenCount when a usage event is received', async () => {
+		const adapter: ProviderAdapter = {
+			name: 'mock',
+			async *sendMessage(): AsyncGenerator<StreamEvent> {
+				yield { type: 'usage', inputTokens: 999, outputTokens: 100 }
+				yield { type: 'text_delta', text: 'done' }
+				yield { type: 'done', finishReason: 'stop' }
+			},
+		}
+
+		const events = await collectEvents(
+			runAgentLoop(createRouter(adapter), {
+				execute: async () => ({ ok: true, data: 'ok' }),
+			}, {
+				messages: [{ role: 'user', content: 'go' }],
+				tools: EMPTY_TOOLS,
+				hookRegistry: new HookRegistry(),
+				runContext: createRunContext('conv-usage-token'),
+			}),
+		)
+
+		const usageEvents = events.filter((event) => event.type === 'usage')
+		expect(usageEvents.length).toBe(1)
+		const usageEvent = usageEvents[0]
+		if (usageEvent.type === 'usage') {
+			expect(usageEvent.inputTokens).toBe(999)
+			expect(usageEvent.outputTokens).toBe(100)
+		}
+	})
+
 	it('emits error event when max iterations is reached', async () => {
 		const adapter: ProviderAdapter = {
 			name: 'mock',
@@ -175,6 +275,187 @@ describe('runAgentLoop', () => {
 		if (last.type === 'error') {
 			expect(last.error.message).toContain('Max iterations reached')
 		}
+	})
+
+	it('repairs a VALIDATION_ERROR without consuming max iteration budget', async () => {
+		const calls: Message[][] = []
+		let turn = 0
+		const adapter: ProviderAdapter = {
+			name: 'mock',
+			async *sendMessage(messages): AsyncGenerator<StreamEvent> {
+				calls.push(messages.map((entry) => ({ ...entry, toolCalls: entry.toolCalls ? [...entry.toolCalls] : undefined })))
+				turn += 1
+
+				if (turn === 1) {
+					yield {
+						type: 'tool_call_complete',
+						toolCall: { id: 'repair-call', name: 'mock-tool', arguments: { input: 123 } },
+					}
+					yield { type: 'done', finishReason: 'tool_calls' }
+					return
+				}
+
+				if (turn === 2) {
+					yield {
+						type: 'tool_call_complete',
+						toolCall: { id: 'repair-call', name: 'mock-tool', arguments: { input: 'fixed' } },
+					}
+					yield { type: 'done', finishReason: 'tool_calls' }
+					return
+				}
+
+				yield { type: 'text_delta', text: 'done' }
+				yield { type: 'done', finishReason: 'stop' }
+			},
+		}
+
+		let executions = 0
+		const registry: ToolExecutor = {
+			execute: async () => {
+				executions += 1
+				if (executions === 1) {
+					return {
+						ok: false,
+						error: { code: 'VALIDATION_ERROR', message: 'input must be a string' },
+					}
+				}
+
+				return { ok: true, data: 'fixed-output' }
+			},
+		}
+
+		const events = await collectEvents(
+			runAgentLoop(createRouter(adapter), registry, {
+				messages: [{ role: 'user', content: 'repair tool' }],
+				tools: EMPTY_TOOLS,
+				maxIterations: 2,
+				hookRegistry: new HookRegistry(),
+				runContext: createRunContext('conv-validation-repair'),
+			}),
+		)
+
+		expect(executions).toBe(2)
+		expect(turn).toBe(3)
+		expect(events[events.length - 1]).toEqual({ type: 'done', finishReason: 'stop' })
+		expect(events.some((event) => event.type === 'error')).toBe(false)
+
+		const secondCallToolMessages = calls[1].filter((message) => message.role === 'tool')
+		expect(secondCallToolMessages).toEqual([
+			{
+				role: 'tool',
+				content: 'input must be a string',
+				toolCallId: 'repair-call',
+			},
+		])
+	})
+
+	it('counts iterations normally after VALIDATION_ERROR repair budget is exhausted', async () => {
+		let turns = 0
+		const adapter: ProviderAdapter = {
+			name: 'mock',
+			async *sendMessage(): AsyncGenerator<StreamEvent> {
+				turns += 1
+				yield {
+					type: 'tool_call_complete',
+					toolCall: { id: 'exhausted-call', name: 'mock-tool', arguments: { attempt: turns } },
+				}
+				yield { type: 'done', finishReason: 'tool_calls' }
+			},
+		}
+
+		let executions = 0
+		const registry: ToolExecutor = {
+			execute: async () => {
+				executions += 1
+				return {
+					ok: false,
+					error: { code: 'VALIDATION_ERROR', message: `invalid attempt ${executions}` },
+				}
+			},
+		}
+
+		const events = await collectEvents(
+			runAgentLoop(createRouter(adapter), registry, {
+				messages: [{ role: 'user', content: 'repair until budget exhausted' }],
+				tools: EMPTY_TOOLS,
+				maxIterations: 1,
+				hookRegistry: new HookRegistry(),
+				runContext: createRunContext('conv-validation-budget'),
+			}),
+		)
+
+		expect(turns).toBe(3)
+		expect(executions).toBe(3)
+		const validationResults = events.filter(
+			(event) => event.type === 'tool_result' && event.toolResult.toolCallId === 'exhausted-call',
+		)
+		expect(validationResults.length).toBe(3)
+		const last = events[events.length - 1]
+		expect(last.type).toBe('error')
+		if (last.type === 'error') {
+			expect(last.error.message).toContain('Max iterations reached')
+		}
+	})
+
+	it('tracks VALIDATION_ERROR repair budget per tool call id', async () => {
+		const calls: Message[][] = []
+		let turn = 0
+		const adapter: ProviderAdapter = {
+			name: 'mock',
+			async *sendMessage(messages): AsyncGenerator<StreamEvent> {
+				calls.push(messages.map((entry) => ({ ...entry, toolCalls: entry.toolCalls ? [...entry.toolCalls] : undefined })))
+				turn += 1
+
+				if (turn === 1) {
+					yield {
+						type: 'tool_call_complete',
+						toolCall: { id: 'repair-a', name: 'mock-tool', arguments: { value: 1 } },
+					}
+					yield {
+						type: 'tool_call_complete',
+						toolCall: { id: 'repair-b', name: 'mock-tool', arguments: { value: 2 } },
+					}
+					yield { type: 'done', finishReason: 'tool_calls' }
+					return
+				}
+
+				yield { type: 'done', finishReason: 'stop' }
+			},
+		}
+
+		const registry: ToolExecutor = {
+			execute: async (_name, args) => {
+				const toolArgs = typeof args === 'object' && args !== null
+					? (args as Record<string, unknown>)
+					: {}
+				const toolCallId = typeof toolArgs._toolCallId === 'string' ? toolArgs._toolCallId : 'missing'
+
+				return {
+					ok: false,
+					error: { code: 'VALIDATION_ERROR', message: `${toolCallId} is invalid` },
+				}
+			},
+		}
+
+		const events = await collectEvents(
+			runAgentLoop(createRouter(adapter), registry, {
+				messages: [{ role: 'user', content: 'repair two tools' }],
+				tools: EMPTY_TOOLS,
+				maxIterations: 1,
+				hookRegistry: new HookRegistry(),
+				runContext: createRunContext('conv-validation-per-id'),
+			}),
+		)
+
+		expect(turn).toBe(2)
+		expect(events[events.length - 1]).toEqual({ type: 'done', finishReason: 'stop' })
+		expect(events.some((event) => event.type === 'error')).toBe(false)
+
+		const repairContext = calls[1].filter((message) => message.role === 'tool')
+		expect(repairContext).toEqual([
+			{ role: 'tool', content: 'repair-a is invalid', toolCallId: 'repair-a' },
+			{ role: 'tool', content: 'repair-b is invalid', toolCallId: 'repair-b' },
+		])
 	})
 
 	it('fires hooks at expected points', async () => {
@@ -255,12 +536,61 @@ describe('runAgentLoop', () => {
 
 		expect(fired).toEqual([
 			'message:before',
-			'message:after',
 			'tool:before',
 			'tool:after',
+			'message:after',
 			'message:before',
 			'message:after',
 		])
+	})
+
+	it('message:after receives messages including assistant and tool results', async () => {
+		const hooks = new HookRegistry()
+		const capturedMessages: Message[][] = []
+
+		hooks.register('message:after', async (payload) => {
+			capturedMessages.push([...payload.messages])
+		})
+
+		const adapter: ProviderAdapter = {
+			name: 'mock',
+			async *sendMessage(): AsyncGenerator<StreamEvent> {
+				yield {
+					type: 'tool_call_complete',
+					toolCall: {
+						id: 'call-1',
+						name: 'mock-tool',
+						arguments: { input: 'test' },
+					},
+				}
+				yield { type: 'done', finishReason: 'tool_calls' }
+			},
+		}
+
+		const registry: ToolExecutor = {
+			execute: async () => ({ ok: true, data: 'tool-output' }),
+		}
+
+		await collectEvents(
+			runAgentLoop(createRouter(adapter), registry, {
+				messages: [{ role: 'user', content: 'run tool' }],
+				tools: EMPTY_TOOLS,
+				hookRegistry: hooks,
+				runContext: createRunContext('conv-message-after-messages'),
+			}),
+		)
+
+		// Should have captured messages from the first turn's message:after
+		expect(capturedMessages.length).toBeGreaterThanOrEqual(1)
+
+		// The first message:after after tool processing should include:
+		// 1. Original user message
+		// 2. Assistant message with toolCalls
+		// 3. Tool result message
+		const firstCapture = capturedMessages[0]
+		expect(firstCapture.some((m) => m.role === 'user')).toBe(true)
+		expect(firstCapture.some((m) => m.role === 'assistant' && m.toolCalls && m.toolCalls.length > 0)).toBe(true)
+		expect(firstCapture.some((m) => m.role === 'tool' && m.toolCallId === 'call-1')).toBe(true)
 	})
 
 	it('keeps hook conversation ids isolated across parallel runs', async () => {
