@@ -38,6 +38,14 @@ export interface ToolResultEvent {
 	toolResult: ToolResult
 }
 
+export interface UsageEvent {
+	type: 'usage'
+	inputTokens: number
+	outputTokens: number
+	cacheReadTokens?: number
+	cacheWriteTokens?: number
+}
+
 export type StreamEvent =
 	| TextDeltaEvent
 	| ToolCallStartEvent
@@ -46,6 +54,7 @@ export type StreamEvent =
 	| StreamDoneEvent
 	| ToolResultEvent
 	| StreamErrorEvent
+	| UsageEvent
 
 export interface SendMessageOptions {
 	provider?: string
