@@ -213,6 +213,10 @@
 	/* ─── Page shell ─────────────────────────────────────────────────── */
 
 	.view {
+		position: absolute;
+		inset: 0;
+		overflow-y: auto;
+		overflow-x: hidden;
 		display: flex;
 		flex-direction: column;
 		gap: var(--space-8);
