@@ -107,9 +107,14 @@
 
 	type RenderedGroup = RoleGroupDef & { items: AgentProfile[] };
 
-	// Hide schema-only kinds from the rendered roster.
+	// Hide schema-only kinds and the legacy tier-less executor alias from
+	// the rendered roster. The alias was removed from defaultAgentProfiles
+	// but may still exist in users' persisted configs until the loader shim
+	// strips it on next daemon restart.
 	const visibleProfiles = $derived<AgentProfile[]>(
-		profiles.filter((p) => p.kind !== 'default' && p.kind !== 'custom'),
+		profiles.filter(
+			(p) => p.kind !== 'default' && p.kind !== 'custom' && p.id !== 'executor',
+		),
 	);
 
 	const groupedProfiles = $derived<RenderedGroup[]>(
@@ -118,6 +123,11 @@
 			items: visibleProfiles.filter((p) => group.kinds.includes(p.kind)),
 		})).filter((g) => g.items.length > 0),
 	);
+
+	// Partition into singles (exactly 1 agent — rendered side-by-side in a
+	// compact row) and multis (>1 agents — rendered as full-width sections).
+	const singleGroups = $derived(groupedProfiles.filter((g) => g.items.length === 1));
+	const multiGroups  = $derived(groupedProfiles.filter((g) => g.items.length > 1));
 
 	// Total user-facing count for the page header summary line.
 	const totalCount = $derived(visibleProfiles.length);
@@ -174,7 +184,45 @@
 		</div>
 	{:else}
 		<div class="groups">
-			{#each groupedProfiles as group (group.id)}
+			<!-- Singles row — groups with exactly 1 agent sit side-by-side. -->
+			{#if singleGroups.length > 0}
+				<div class="singles-row">
+					{#each singleGroups as group (group.id)}
+						<section
+							class="group-section"
+							style="--group-accent: {group.accent};"
+							aria-labelledby="group-{group.id}"
+						>
+							<div class="group-header">
+								<div class="group-heading-row">
+									<h3 id="group-{group.id}" class="group-heading">
+										{group.label}
+									</h3>
+									<span class="group-count" aria-label="{group.items.length} agents">
+										{group.items.length}
+									</span>
+								</div>
+								<p class="group-rubric quire-sm">
+									{group.rubric}
+								</p>
+							</div>
+							<ul class="card-grid">
+								{#each group.items as profile (profile.id)}
+									<li>
+										<AgentProfileCard
+											{profile}
+											initialExpanded={profile.id === initialExpandedId}
+										/>
+									</li>
+								{/each}
+							</ul>
+						</section>
+					{/each}
+				</div>
+			{/if}
+
+			<!-- Multi-agent groups — each gets a full-width section. -->
+			{#each multiGroups as group (group.id)}
 				<section
 					class="group-section"
 					style="--group-accent: {group.accent};"
@@ -476,6 +524,24 @@
 		max-width: 60ch;
 	}
 
+	/* ─── Singles row ───────────────────────────────────────────────── */
+	/* Groups with exactly 1 agent are placed side-by-side so they don't
+	   each consume a full-width section on their own. Each column is a
+	   self-contained group-section with its own accent rail and label. */
+
+	.singles-row {
+		display: grid;
+		grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+		gap: var(--space-6);
+		align-items: start;
+	}
+
+	/* Inside the singles row the card always fills its column — the outer
+	   grid already handles column sizing, so we don't need auto-fill. */
+	.singles-row .card-grid {
+		grid-template-columns: 1fr;
+	}
+
 	/* ─── Card grid ──────────────────────────────────────────────────── */
 
 	.card-grid {
@@ -527,6 +593,10 @@
 
 		.group-section {
 			padding-left: var(--space-4);
+		}
+
+		.singles-row {
+			grid-template-columns: 1fr;
 		}
 
 		.card-grid {
