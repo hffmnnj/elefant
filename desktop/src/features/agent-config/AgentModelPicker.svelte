@@ -61,17 +61,28 @@
 
 	// Panel position — computed from the trigger's bounding rect so the panel
 	// uses position:fixed and escapes every card/grid stacking context.
-	let panelTop  = $state(0);
-	let panelLeft = $state(0);
-	let panelW    = $state(0);
+	let panelTop    = $state(0);
+	let panelLeft   = $state(0);
+	let panelW      = $state(0);
+	let openUpward  = $state(false);
+
+	const PANEL_MAX_H = 340; // keep in sync with CSS max-height
+	const GAP = 4;           // px gap between trigger and panel
 
 	function measureTrigger(): void {
 		const rect = triggerEl?.getBoundingClientRect();
-		if (rect) {
-			panelTop  = rect.bottom + 2; // 2px gap below trigger
-			panelLeft = rect.left;
-			panelW    = rect.width;
-		}
+		if (!rect) return;
+
+		const spaceBelow = window.innerHeight - rect.bottom - GAP;
+		const spaceAbove = rect.top - GAP;
+		const flip = spaceBelow < PANEL_MAX_H && spaceAbove > spaceBelow;
+
+		openUpward = flip;
+		panelLeft  = rect.left;
+		panelW     = rect.width;
+		panelTop   = flip
+			? rect.top - GAP - Math.min(PANEL_MAX_H, spaceAbove)
+			: rect.bottom + GAP;
 	}
 
 	// ── Derived: grouping + filtering ────────────────────────────────────────
