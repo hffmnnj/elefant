@@ -25,6 +25,21 @@
 		ChevronDownIcon,
 	} from '$lib/icons/index.js';
 
+	// ── Portal action ─────────────────────────────────────────────────────────
+	// Moves a DOM node to document.body so it escapes every ancestor stacking
+	// context — including AppShell's `will-change: transform` containers, which
+	// re-home `position:fixed` elements to the shell instead of the viewport.
+	function portal(node: HTMLElement): { destroy(): void } {
+		document.body.appendChild(node);
+		return {
+			destroy() {
+				if (node.parentNode === document.body) {
+					document.body.removeChild(node);
+				}
+			},
+		};
+	}
+
 	// ── Props ────────────────────────────────────────────────────────────────
 
 	type Props = {
@@ -263,7 +278,10 @@
 	</button>
 
 	{#if open}
+		<!-- use:portal moves this node to document.body, escaping AppShell's
+		     will-change:transform containing block entirely.              -->
 		<div
+			use:portal
 			bind:this={panelEl}
 			id="agent-model-picker-panel"
 			class="panel"

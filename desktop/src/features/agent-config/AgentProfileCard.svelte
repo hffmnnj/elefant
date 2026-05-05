@@ -246,9 +246,10 @@
 		gap: var(--space-3);
 		padding: var(--space-4) var(--space-5);
 		border-radius: var(--radius-plate);
-		/* Fill the grid <li> so all cards in a row reach the same height. */
-		height: 100%;
-		box-sizing: border-box;
+		/* flex:1 fills the <li> (display:flex flex-direction:column) so all
+		   cards in a grid row reach the same height as the tallest card.  */
+		flex: 1;
+		min-height: 0;
 		transition:
 			border-color var(--transition-fast, 120ms ease),
 			box-shadow var(--transition-fast, 120ms ease);
