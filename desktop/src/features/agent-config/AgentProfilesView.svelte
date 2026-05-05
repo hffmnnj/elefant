@@ -564,7 +564,9 @@
 	}
 
 	.card-grid > li {
-		min-width: 0; /* allow grid children to shrink — prevents overflow */
+		min-width: 0;  /* allow grid children to shrink — prevents overflow */
+		display: flex; /* make the card fill the grid cell height */
+		flex-direction: column;
 	}
 
 	/* ─── Responsive ─────────────────────────────────────────────────── */

@@ -246,6 +246,9 @@
 		gap: var(--space-3);
 		padding: var(--space-4) var(--space-5);
 		border-radius: var(--radius-plate);
+		/* Fill the grid <li> so all cards in a row reach the same height. */
+		height: 100%;
+		box-sizing: border-box;
 		transition:
 			border-color var(--transition-fast, 120ms ease),
 			box-shadow var(--transition-fast, 120ms ease);

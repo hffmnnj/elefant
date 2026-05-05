@@ -44,6 +44,21 @@
 	let searchEl = $state<HTMLInputElement | null>(null);
 	let focusedIndex = $state(-1);
 
+	// Panel position — computed from the trigger's bounding rect so the panel
+	// uses position:fixed and escapes every card/grid stacking context.
+	let panelTop  = $state(0);
+	let panelLeft = $state(0);
+	let panelW    = $state(0);
+
+	function measureTrigger(): void {
+		const rect = triggerEl?.getBoundingClientRect();
+		if (rect) {
+			panelTop  = rect.bottom + 2; // 2px gap below trigger
+			panelLeft = rect.left;
+			panelW    = rect.width;
+		}
+	}
+
 	// ── Derived: grouping + filtering ────────────────────────────────────────
 
 	type Group = { provider: string; models: ModelEntry[] };
@@ -118,6 +133,7 @@
 
 	function openPanel(): void {
 		if (disabled) return;
+		measureTrigger();
 		open = true;
 		query = '';
 		focusedIndex = -1;
@@ -154,7 +170,7 @@
 		);
 	}
 
-	// ── Click outside ────────────────────────────────────────────────────────
+	// ── Click outside + scroll close ─────────────────────────────────────────
 
 	$effect(() => {
 		if (!open) return;
@@ -164,8 +180,15 @@
 			if (triggerEl?.contains(target) || panelEl?.contains(target)) return;
 			closePanel(false);
 		};
+		// Close (and let the user reopen) when the page scrolls so the fixed
+		// panel doesn't drift away from the trigger.
+		const onScroll = () => closePanel(false);
 		document.addEventListener('pointerdown', onPointerDown, true);
-		return () => document.removeEventListener('pointerdown', onPointerDown, true);
+		document.addEventListener('scroll', onScroll, { capture: true, passive: true });
+		return () => {
+			document.removeEventListener('pointerdown', onPointerDown, true);
+			document.removeEventListener('scroll', onScroll, true);
+		};
 	});
 
 	// ── Keyboard ─────────────────────────────────────────────────────────────
@@ -243,10 +266,11 @@
 		<div
 			bind:this={panelEl}
 			id="agent-model-picker-panel"
-			class="panel quire-md"
+			class="panel"
 			role="listbox"
 			aria-label="Select model"
 			tabindex="-1"
+			style="top:{panelTop}px; left:{panelLeft}px; width:{panelW}px;"
 			onkeydown={onPanelKeydown}
 		>
 			<div class="search">
@@ -397,8 +421,6 @@
 
 	.trigger.open {
 		border-color: var(--color-primary, #4049e1);
-		border-bottom-left-radius: 0;
-		border-bottom-right-radius: 0;
 	}
 
 	.trigger[disabled] {
@@ -431,27 +453,25 @@
 		color: var(--color-primary, #4049e1);
 	}
 
-	/* ── Panel — solid, elevated dropdown ─────────────────────────────── */
+	/* ── Panel — fixed, fully opaque, above every stacking context ───── */
+	/* position:fixed + inline top/left/width (set by measureTrigger())
+	   means the panel is never clipped by a card's box-shadow / transition
+	   stacking context, regardless of grid layout or card z-index.         */
 
 	.panel {
-		position: absolute;
-		top: 100%; /* flush — trigger already has open border-radius removed */
-		left: 0;
-		right: 0;
-		min-width: 100%;
+		position: fixed; /* escape all card/grid stacking contexts */
+		/* top / left / width are injected as inline style by the script */
 		max-height: 340px;
 		display: flex;
 		flex-direction: column;
-		/* Fully opaque dark surface — no transparency */
+		/* Fully opaque dark surface */
 		background-color: var(--surface-leaf, #16162a);
 		border: 1px solid var(--color-primary, #4049e1);
-		border-top: 1px solid var(--border-hairline, rgba(255,255,255,0.06));
-		border-bottom-left-radius: var(--radius-leaf, 6px);
-		border-bottom-right-radius: var(--radius-leaf, 6px);
+		border-radius: var(--radius-leaf, 6px);
 		box-shadow:
-			0 8px 32px rgba(0, 0, 0, 0.55),
-			0 2px 8px rgba(0, 0, 0, 0.35);
-		z-index: 100;
+			0 8px 32px rgba(0, 0, 0, 0.60),
+			0 2px 8px rgba(0, 0, 0, 0.40);
+		z-index: 9999; /* above everything */
 		overflow: hidden;
 	}
 
