@@ -195,9 +195,12 @@
 			if (triggerEl?.contains(target) || panelEl?.contains(target)) return;
 			closePanel(false);
 		};
-		// Close (and let the user reopen) when the page scrolls so the fixed
-		// panel doesn't drift away from the trigger.
-		const onScroll = () => closePanel(false);
+		// Close when the *page* scrolls so the fixed panel doesn't drift.
+		// Ignore scroll events that originate inside the panel list itself.
+		const onScroll = (e: Event) => {
+			if (panelEl && panelEl.contains(e.target as Node)) return;
+			closePanel(false);
+		};
 		document.addEventListener('pointerdown', onPointerDown, true);
 		document.addEventListener('scroll', onScroll, { capture: true, passive: true });
 		return () => {

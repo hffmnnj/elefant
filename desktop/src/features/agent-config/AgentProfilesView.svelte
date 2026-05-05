@@ -539,17 +539,26 @@
 	   each consume a full-width section on their own. Each column is a
 	   self-contained group-section with its own accent rail and label. */
 
+	/* align-items defaults to stretch — every section in the row reaches
+	   the height of the tallest one, giving equal-height card columns.  */
 	.singles-row {
 		display: grid;
 		grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
 		gap: var(--space-6);
-		align-items: start;
 	}
 
-	/* Inside the singles row the card always fills its column — the outer
-	   grid already handles column sizing, so we don't need auto-fill. */
+	/* The group-section inside singles-row must propagate height down:
+	   flex-direction:column is already set on .group-section globally.
+	   flex:1 makes the card-grid expand to fill remaining space after
+	   the group-header, so the card itself can flex:1 to fill it.    */
+	.singles-row .group-section {
+		height: 100%;
+	}
+
 	.singles-row .card-grid {
 		grid-template-columns: 1fr;
+		flex: 1;        /* fill remaining height in the group-section   */
+		min-height: 0;
 	}
 
 	/* ─── Card grid ──────────────────────────────────────────────────── */
