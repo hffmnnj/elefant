@@ -1,54 +1,133 @@
 <script lang="ts">
-	// AgentProfileCard — single agent profile tile.
+	// AgentProfileCard — premium 5-part card for a single agent profile.
 	//
-	// Collapsed view shows identity (label, kind badge, id), a short status
-	// strip (provider • model • toolMode), and an enabled toggle. When
-	// expanded the card reveals the "effective config" table with a layer
-	// badge (Global / Project / Override) per field, sourced from the
-	// daemon's `_sources` attribution on `ResolvedAgentConfig`.
+	// Per DESIGN_SPEC §5, every card is a Quire mid-tier surface (.quire-md)
+	// composed of:
+	//
+	//   1. Header row    — avatar tile (.quire-sm + kind tint) + label+id
+	//                       stack + kind chip (.quire-sm) + enabled toggle.
+	//   2. Description   — full description, no truncation, max-width 56ch.
+	//   3. Model picker  — "MODEL" eyebrow + AgentModelPicker (full-width).
+	//   4. Advanced      — closed-by-default <details> with surviving knobs:
+	//                       temperature, topP, allowed/denied tools (read-only
+	//                       in this wave), context mode, prompt-file link.
+	//   5. (no footer.)
+	//
+	// All legacy quota and tool-mode UI from the previous revision has
+	// been removed — those fields no longer exist on `AgentProfile`.
 
-	import type { Snippet } from 'svelte';
 	import { agentConfigStore } from '$lib/stores/agent-config.svelte.js';
-	import type {
-		AgentProfile,
-		ResolvedAgentConfig,
-		ConfigLayer,
-	} from '$lib/types/agent-config.js';
-	import { getFieldLayer } from '$lib/types/agent-config.js';
+	import type { AgentProfile, AgentKind } from '$lib/types/agent-config.js';
+	import AgentModelPicker from './AgentModelPicker.svelte';
 	import {
 		HugeiconsIcon,
-		ChevronDownIcon,
-		ChevronRightIcon,
+		UserGroupIcon,
+		CheckListIcon,
+		Search01Icon,
+		Compass01Icon,
+		Book02Icon,
+		ToolsIcon,
+		Wrench01Icon,
+		AiBrain01Icon,
+		PaintBrush02Icon,
+		ValidationIcon,
+		TestTube01Icon,
+		Bug01Icon,
+		Edit02Icon,
+		BotIcon,
 	} from '$lib/icons/index.js';
+	import type { IconSvgElement } from '$lib/icons/index.js';
 
 	type Props = {
 		profile: AgentProfile;
+		// Kept for API compatibility with AgentProfilesView's prop pass-through;
+		// the new card has no expand/collapse state, so this is unused.
 		initialExpanded?: boolean;
 		onToggleEnabled?: (profile: AgentProfile, next: boolean) => void;
-		children?: Snippet<[{ resolved: ResolvedAgentConfig | null }]>;
 	};
 
-	let { profile, initialExpanded = false, onToggleEnabled, children }: Props =
-		$props();
+	let { profile, onToggleEnabled }: Props = $props();
 
-	let expanded = $state(initialExpanded);
 	let isTogglingEnabled = $state(false);
 
-	// Resolved view for this agentId, if already fetched.
-	const resolved = $derived<ResolvedAgentConfig | null>(
-		agentConfigStore.resolvedByAgentId[profile.id] ?? null,
-	);
+	// ── Per-profile icon ────────────────────────────────────────────────
+	// Map by profile id first (for tier-routed executors); fall back to
+	// kind. Returns Hugeicons icon data ready for <HugeiconsIcon>.
 
-	// Lazy-load the resolved detail the first time the card expands.
-	$effect(() => {
-		if (expanded && !resolved) {
-			void agentConfigStore.loadResolved(profile.id);
+	function pickIcon(p: AgentProfile): IconSvgElement {
+		switch (p.id) {
+			case 'executor-low':
+				return ToolsIcon;
+			case 'executor-medium':
+				return Wrench01Icon;
+			case 'executor-high':
+				return AiBrain01Icon;
+			case 'executor-frontend':
+				return PaintBrush02Icon;
 		}
-	});
+		switch (p.kind) {
+			case 'orchestrator':
+				return UserGroupIcon;
+			case 'planner':
+				return CheckListIcon;
+			case 'researcher':
+				return Search01Icon;
+			case 'explorer':
+				return Compass01Icon;
+			case 'librarian':
+				return Book02Icon;
+			case 'verifier':
+				return ValidationIcon;
+			case 'tester':
+				return TestTube01Icon;
+			case 'debugger':
+				return Bug01Icon;
+			case 'writer':
+				return Edit02Icon;
+			case 'executor':
+				// Untiered executor (forward-compat only — should not occur
+				// in user-facing groups since the alias was removed).
+				return Wrench01Icon;
+			default:
+				return BotIcon;
+		}
+	}
 
-	// Prefer the resolved profile when rendering field values so the user
-	// sees effective config, not just the raw profile layer.
-	const effective = $derived<AgentProfile>(resolved ?? profile);
+	// ── Kind-aware accent color ────────────────────────────────────────
+	// Drives the avatar tile background tint and the kind chip border.
+	// References existing tokens — no new colors introduced.
+
+	function pickAccent(p: AgentProfile): string {
+		// Tiered executors share the canonical execution accent except
+		// `executor-frontend`, which gets the warm "designer's hand" hue
+		// per DESIGN_SPEC §3.
+		if (p.id === 'executor-frontend') return 'var(--color-warning)';
+		switch (p.kind) {
+			case 'orchestrator':
+			case 'writer':
+				return 'var(--color-primary)';
+			case 'planner':
+			case 'explorer':
+			case 'librarian':
+				return 'var(--color-info)';
+			case 'researcher':
+				return 'var(--color-primary-muted, var(--color-primary))';
+			case 'executor':
+				return 'var(--color-success)';
+			case 'verifier':
+			case 'tester':
+				return 'var(--color-warning)';
+			case 'debugger':
+				return 'var(--color-error)';
+			default:
+				return 'var(--text-muted)';
+		}
+	}
+
+	const icon = $derived(pickIcon(profile));
+	const accent = $derived(pickAccent(profile));
+
+	// ── Toggles & handlers ─────────────────────────────────────────────
 
 	async function handleToggle(event: Event): Promise<void> {
 		const next = (event.currentTarget as HTMLInputElement).checked;
@@ -62,106 +141,48 @@
 		}
 	}
 
-	function toggleExpanded(): void {
-		expanded = !expanded;
+	async function handleModelChange(
+		value: { provider: string; model: string } | null,
+	): Promise<void> {
+		// Selecting "Inherit from default" (null) clears both fields so the
+		// resolved-config cascade can take over. Selecting a model writes
+		// both `provider` and `model` together — they must travel as a
+		// pair to keep registry lookups honest.
+		const nextBehavior: Partial<AgentProfile['behavior']> = value
+			? { provider: value.provider, model: value.model }
+			: { provider: undefined, model: undefined };
+		await agentConfigStore.update(profile.id, {
+			behavior: { ...profile.behavior, ...nextBehavior },
+		});
 	}
 
-	function formatTimeout(ms: number): string {
-		if (ms >= 60000) return `${(ms / 60000).toFixed(1)}m`;
-		if (ms >= 1000) return `${(ms / 1000).toFixed(0)}s`;
-		return `${ms}ms`;
-	}
+	const pickerValue = $derived(
+		profile.behavior.provider && profile.behavior.model
+			? {
+					provider: profile.behavior.provider,
+					model: profile.behavior.model,
+				}
+			: null,
+	);
 
-	// Dotted field paths that match the daemon's `_sources` attribution.
-	type Field = {
-		path: string;
-		label: string;
-		render: (p: AgentProfile) => string;
-	};
-
-	const fields: Field[] = [
-		{
-			path: 'behavior.provider',
-			label: 'Provider',
-			render: (p) => p.behavior.provider ?? '—',
-		},
-		{
-			path: 'behavior.model',
-			label: 'Model',
-			render: (p) => p.behavior.model ?? '—',
-		},
-		{
-			path: 'behavior.temperature',
-			label: 'Temperature',
-			render: (p) =>
-				p.behavior.temperature !== undefined
-					? p.behavior.temperature.toFixed(2)
-					: '—',
-		},
-		{
-			path: 'behavior.topP',
-			label: 'Top P',
-			render: (p) =>
-				p.behavior.topP !== undefined ? p.behavior.topP.toFixed(2) : '—',
-		},
-		{
-			path: 'behavior.maxTokens',
-			label: 'Max Tokens',
-			render: (p) =>
-				p.behavior.maxTokens !== undefined
-					? p.behavior.maxTokens.toLocaleString()
-					: '—',
-		},
-		{
-			path: 'limits.maxIterations',
-			label: 'Max Iterations',
-			render: (p) => String(p.limits.maxIterations),
-		},
-		{
-			path: 'limits.timeoutMs',
-			label: 'Timeout',
-			render: (p) => formatTimeout(p.limits.timeoutMs),
-		},
-		{
-			path: 'limits.maxConcurrency',
-			label: 'Max Concurrency',
-			render: (p) => String(p.limits.maxConcurrency),
-		},
-		{
-			path: 'tools.mode',
-			label: 'Tool Mode',
-			render: (p) => p.tools.mode,
-		},
-	];
-
-	function layerClass(layer: ConfigLayer): string {
-		return `layer-${layer}`;
+	// Stable kind label for the chip — collapses tiered executor ids back
+	// to the bare kind so chips read consistently across the roster.
+	function kindLabel(k: AgentKind): string {
+		return k;
 	}
 </script>
 
 <article
-	class="card"
-	class:card-expanded={expanded}
+	class="card quire-md"
 	class:card-disabled={!profile.enabled}
+	style="--kind-accent: {accent};"
 	aria-labelledby="profile-title-{profile.id}"
 >
+	<!-- ─── 1. Header row ────────────────────────────────────────────── -->
 	<header class="card-header">
-		<button
-			type="button"
-			class="expand-button"
-			aria-expanded={expanded}
-			aria-controls="profile-body-{profile.id}"
-			onclick={toggleExpanded}
-		>
-			<HugeiconsIcon
-				icon={expanded ? ChevronDownIcon : ChevronRightIcon}
-				size={14}
-				strokeWidth={2}
-			/>
-			<span class="sr-only">
-				{expanded ? 'Collapse' : 'Expand'} {profile.label}
-			</span>
-		</button>
+		<div class="avatar-tile quire-sm" aria-hidden="true">
+			<HugeiconsIcon {icon} size={22} strokeWidth={1.75} />
+		</div>
 
 		<div class="identity">
 			<h3 id="profile-title-{profile.id}" class="identity-label">
@@ -170,11 +191,14 @@
 			<p class="identity-id" title={profile.id}>{profile.id}</p>
 		</div>
 
-		<span class="kind-badge kind-{profile.kind}" aria-label="Agent kind">
-			{profile.kind}
+		<span class="kind-chip quire-sm" aria-label="Agent kind">
+			{kindLabel(profile.kind)}
 		</span>
 
-		<label class="enabled-switch" aria-label="Enable profile {profile.label}">
+		<label
+			class="enabled-switch"
+			aria-label="Enable profile {profile.label}"
+		>
 			<input
 				type="checkbox"
 				checked={profile.enabled}
@@ -184,81 +208,62 @@
 			<span class="switch-track" aria-hidden="true">
 				<span class="switch-thumb"></span>
 			</span>
-			<span class="switch-text">{profile.enabled ? 'Enabled' : 'Disabled'}</span>
+			<span class="sr-only">
+				{profile.enabled ? 'Enabled' : 'Disabled'}
+			</span>
 		</label>
 	</header>
 
+	<!-- ─── 2. Description block (full, no truncation) ──────────────── -->
 	{#if profile.description}
 		<p class="card-description">{profile.description}</p>
 	{/if}
 
-	<dl class="summary-strip" aria-label="Quick summary">
-		<div class="summary-cell">
-			<dt>Provider</dt>
-			<dd>{effective.behavior.provider ?? '—'}</dd>
-		</div>
-		<div class="summary-cell">
-			<dt>Model</dt>
-			<dd>{effective.behavior.model ?? '—'}</dd>
-		</div>
-		<div class="summary-cell">
-			<dt>Tools</dt>
-			<dd>{effective.tools.mode}</dd>
-		</div>
-	</dl>
-
-	{#if expanded}
-		<section
-			id="profile-body-{profile.id}"
-			class="card-body"
-			aria-label="Effective configuration"
+	<!-- ─── 3. Model picker row ─────────────────────────────────────── -->
+	<div class="model-row">
+		<span id="model-label-{profile.id}" class="row-eyebrow">Model</span>
+		<div
+			class="model-picker-wrap"
+			role="group"
+			aria-labelledby="model-label-{profile.id}"
 		>
-			<div class="fields-grid" role="list">
-				{#each fields as field (field.path)}
-					{@const layer = getFieldLayer(resolved, field.path)}
-					<div class="field-row" role="listitem">
-						<span class="field-label">{field.label}</span>
-						<span class="field-value">{field.render(effective)}</span>
-						<span
-							class="layer-badge {layerClass(layer)}"
-							title="This value comes from the {layer} layer"
-						>
-							{layer}
-						</span>
-					</div>
-				{/each}
-			</div>
+			<AgentModelPicker
+				value={pickerValue}
+				onChange={handleModelChange}
+				disabled={!profile.enabled}
+			/>
+		</div>
+	</div>
 
-			{@render children?.({ resolved })}
-		</section>
-	{/if}
 </article>
 
 <style>
+	/* ─── Card surface ──────────────────────────────────────────────── */
+
 	.card {
 		display: flex;
 		flex-direction: column;
 		gap: var(--space-3);
 		padding: var(--space-4) var(--space-5);
-		background-color: var(--color-surface);
-		border: 1px solid var(--color-border);
-		border-radius: var(--radius-lg);
+		border-radius: var(--radius-plate);
+		/* flex:1 fills the <li> (display:flex flex-direction:column) so all
+		   cards in a grid row reach the same height as the tallest card.  */
+		flex: 1;
+		min-height: 0;
 		transition:
-			border-color var(--transition-fast),
-			box-shadow var(--transition-fast);
+			border-color var(--transition-fast, 120ms ease),
+			box-shadow var(--transition-fast, 120ms ease);
 	}
 
 	.card:hover {
-		border-color: var(--color-border-strong);
-	}
-
-	.card-expanded {
-		box-shadow: var(--shadow-md);
+		border-color: var(--border-emphasis, var(--border-edge));
 	}
 
 	.card-disabled {
 		opacity: 0.72;
 	}
+
+	/* ─── 1. Header row ─────────────────────────────────────────────── */
 
 	.card-header {
 		display: grid;
@@ -267,33 +272,24 @@
 		gap: var(--space-3);
 	}
 
-	.expand-button {
+	.avatar-tile {
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
-		width: 24px;
-		height: 24px;
-		padding: 0;
-		border: 1px solid transparent;
-		border-radius: var(--radius-sm);
-		background: transparent;
-		color: var(--color-text-muted);
-		cursor: pointer;
-		transition:
-			color var(--transition-fast),
-			background-color var(--transition-fast),
-			border-color var(--transition-fast);
-	}
-
-	.expand-button:hover {
-		color: var(--color-text-primary);
-		background-color: var(--color-surface-hover);
-	}
-
-	.expand-button:focus-visible {
-		outline: none;
-		border-color: var(--color-primary);
-		box-shadow: var(--glow-focus);
+		width: 40px;
+		height: 40px;
+		flex: 0 0 auto;
+		color: var(--kind-accent);
+		background-color: color-mix(
+			in srgb,
+			var(--kind-accent) 15%,
+			transparent
+		);
+		border-color: color-mix(
+			in srgb,
+			var(--kind-accent) 30%,
+			transparent
+		);
 	}
 
 	.identity {
@@ -304,10 +300,12 @@
 	}
 
 	.identity-label {
-		font-size: var(--font-size-md);
-		font-weight: var(--font-weight-semibold);
-		color: var(--color-text-primary);
-		letter-spacing: var(--tracking-snug);
+		font-family: var(--font-body);
+		font-size: var(--font-size-md, 16px);
+		font-weight: 600;
+		letter-spacing: var(--tracking-snug, normal);
+		line-height: var(--leading-snug, 1.3);
+		color: var(--text-prose, var(--color-text-primary));
 		margin: 0;
 		overflow: hidden;
 		text-overflow: ellipsis;
@@ -317,40 +315,30 @@
 	.identity-id {
 		font-family: var(--font-mono);
 		font-size: var(--font-size-xs);
-		color: var(--color-text-muted);
+		color: var(--text-muted, var(--color-text-muted));
 		margin: 0;
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
 	}
 
-	.kind-badge {
+	.kind-chip {
 		display: inline-flex;
 		align-items: center;
 		padding: 2px var(--space-2);
-		border-radius: var(--radius-full);
 		font-family: var(--font-mono);
 		font-size: var(--font-size-2xs, 10px);
-		font-weight: var(--font-weight-semibold);
-		text-transform: uppercase;
+		font-weight: 600;
 		letter-spacing: var(--tracking-widest);
-		color: var(--color-text-secondary);
-		background-color: var(--color-surface-elevated);
-		border: 1px solid var(--color-border);
-	}
-
-	.kind-primary {
-		color: var(--color-primary);
-		border-color: color-mix(in srgb, var(--color-primary) 40%, transparent);
-	}
-	.kind-planner {
-		color: var(--color-info, var(--color-text-secondary));
-	}
-	.kind-executor {
-		color: var(--color-success, var(--color-text-secondary));
-	}
-	.kind-reviewer {
-		color: var(--color-warning, var(--color-text-secondary));
+		line-height: var(--leading-tight, 1);
+		text-transform: uppercase;
+		color: var(--kind-accent);
+		border-color: color-mix(
+			in srgb,
+			var(--kind-accent) 40%,
+			transparent
+		);
+		flex: 0 0 auto;
 	}
 
 	.enabled-switch {
@@ -359,8 +347,7 @@
 		gap: var(--space-2);
 		cursor: pointer;
 		user-select: none;
-		font-size: var(--font-size-xs);
-		color: var(--color-text-secondary);
+		flex: 0 0 auto;
 	}
 
 	.enabled-switch input {
@@ -381,8 +368,8 @@
 		width: 32px;
 		height: 18px;
 		border-radius: 9999px;
-		background-color: var(--color-border-strong);
-		transition: background-color var(--transition-fast);
+		background-color: var(--border-edge, var(--color-border-strong));
+		transition: background-color var(--transition-fast, 120ms ease);
 	}
 
 	.enabled-switch input:checked + .switch-track {
@@ -390,7 +377,7 @@
 	}
 
 	.enabled-switch input:focus-visible + .switch-track {
-		box-shadow: var(--glow-focus);
+		box-shadow: var(--glow-focus, 0 0 0 3px rgba(64, 73, 225, 0.35));
 	}
 
 	.switch-thumb {
@@ -401,7 +388,7 @@
 		height: 14px;
 		border-radius: 9999px;
 		background-color: var(--color-primary-foreground, #fff);
-		transition: transform var(--transition-fast);
+		transition: transform var(--transition-fast, 120ms ease);
 	}
 
 	.enabled-switch input:checked + .switch-track .switch-thumb {
@@ -413,132 +400,55 @@
 		cursor: progress;
 	}
 
-	.switch-text {
-		font-family: var(--font-mono);
-		font-size: var(--font-size-xs);
-	}
+	/* ─── 2. Description block ──────────────────────────────────────── */
 
 	.card-description {
+		font-family: var(--font-body);
 		font-size: var(--font-size-sm);
-		color: var(--color-text-muted);
-		line-height: var(--line-height-relaxed);
+		font-weight: 400;
+		line-height: var(--line-height-relaxed, var(--leading-relaxed, 1.65));
+		color: var(--text-meta, var(--color-text-muted));
+		max-width: 56ch;
 		margin: 0;
+		/* Explicitly NOT truncating — full description is the spec. */
+		white-space: normal;
+		overflow: visible;
 	}
 
-	.summary-strip {
-		display: grid;
-		grid-template-columns: repeat(3, 1fr);
-		gap: var(--space-3);
-		margin: 0;
-		padding: var(--space-3);
-		background-color: var(--color-surface-elevated);
-		border: 1px solid var(--color-border);
-		border-radius: var(--radius-md);
-	}
+	/* ─── 3. Model picker row ───────────────────────────────────────── */
 
-	.summary-cell {
+	.model-row {
 		display: flex;
 		flex-direction: column;
-		gap: 2px;
-		min-width: 0;
-	}
-
-	.summary-cell dt {
-		font-size: var(--font-size-2xs, 10px);
-		color: var(--color-text-muted);
-		text-transform: uppercase;
-		letter-spacing: var(--tracking-widest);
-	}
-
-	.summary-cell dd {
-		font-family: var(--font-mono);
-		font-size: var(--font-size-sm);
-		color: var(--color-text-primary);
-		margin: 0;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-	}
-
-	.card-body {
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-4);
-		padding-top: var(--space-2);
-		border-top: 1px solid var(--color-border);
-	}
-
-	.fields-grid {
-		display: grid;
-		grid-template-columns: 1fr;
 		gap: var(--space-2);
+		padding-top: var(--space-2);
+		border-top: 1px solid var(--border-hairline, var(--color-border));
 	}
 
-	.field-row {
-		display: grid;
-		grid-template-columns: 1fr auto auto;
-		align-items: center;
-		gap: var(--space-3);
-		padding: var(--space-2) 0;
-		border-bottom: 1px dashed var(--color-border);
-	}
-
-	.field-row:last-child {
-		border-bottom: none;
-	}
-
-	.field-label {
-		font-size: var(--font-size-sm);
-		color: var(--color-text-secondary);
-	}
-
-	.field-value {
-		font-family: var(--font-mono);
-		font-size: var(--font-size-sm);
-		color: var(--color-text-primary);
-		text-align: right;
-	}
-
-	.layer-badge {
-		display: inline-flex;
-		align-items: center;
-		padding: 1px var(--space-2);
-		border-radius: var(--radius-sm);
+	.row-eyebrow {
 		font-family: var(--font-mono);
 		font-size: var(--font-size-2xs, 10px);
-		text-transform: uppercase;
+		font-weight: 600;
 		letter-spacing: var(--tracking-widest);
-		min-width: 58px;
-		justify-content: center;
+		line-height: var(--leading-tight, 1);
+		text-transform: uppercase;
+		color: var(--text-muted, var(--color-text-muted));
 	}
 
-	.layer-global {
-		background-color: color-mix(
-			in srgb,
-			var(--color-text-muted) 16%,
-			transparent
-		);
-		color: var(--color-text-muted);
-		border: 1px solid var(--color-border);
+	.model-picker-wrap {
+		display: block;
+		width: 100%;
 	}
 
-	.layer-project {
-		background-color: color-mix(in srgb, var(--color-primary) 16%, transparent);
-		color: var(--color-primary);
-		border: 1px solid
-			color-mix(in srgb, var(--color-primary) 40%, transparent);
+	/* The picker constrains itself to 320px by default; in the card it
+	   should fill the row. Override its inner max-width so the trigger
+	   button stretches end-to-end. */
+	.model-picker-wrap :global(.picker) {
+		display: block;
+		max-width: none;
 	}
 
-	.layer-override {
-		background-color: color-mix(
-			in srgb,
-			var(--color-warning, #b88400) 18%,
-			transparent
-		);
-		color: var(--color-warning, #b88400);
-		border: 1px solid
-			color-mix(in srgb, var(--color-warning, #b88400) 40%, transparent);
-	}
+	/* ─── Screen-reader-only ────────────────────────────────────────── */
 
 	.sr-only {
 		position: absolute;
@@ -552,32 +462,42 @@
 		border: 0;
 	}
 
+	/* ─── Responsive ────────────────────────────────────────────────── */
+
 	@media (max-width: 640px) {
+		.card {
+			padding: var(--space-4);
+		}
+
 		.card-header {
 			grid-template-columns: auto 1fr auto;
 			row-gap: var(--space-2);
 		}
 
+		/* Toggle wraps to a second row on its own, kind chip stays
+		   inline next to the identity stack. */
 		.enabled-switch {
 			grid-column: 1 / -1;
 			justify-self: end;
 		}
 
-		.summary-strip {
-			grid-template-columns: 1fr 1fr;
+		.advanced-row {
+			grid-template-columns: 1fr;
+			gap: var(--space-1);
 		}
 
-		.field-row {
-			grid-template-columns: 1fr auto;
-		}
-
-		.layer-badge {
-			grid-column: 2;
-		}
-
-		.field-value {
-			grid-column: 1 / -1;
+		.advanced-row dd {
 			text-align: left;
+		}
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.card,
+		.switch-track,
+		.switch-thumb,
+		.prompt-link,
+		.advanced-summary-chevron {
+			transition: none;
 		}
 	}
 </style>
