@@ -444,29 +444,16 @@
 		gap: var(--space-10);
 	}
 
-	/* Each role group: 4px accent rail on the left, content offset by
-	   padding-left. Rail is themed via the inline `--group-accent` prop. */
+	/* Each role group — no rail, no left offset. The accent colour is
+	   expressed only as a small dot before the heading text (via
+	   .group-heading::before) so sections breathe cleanly. */
 	.group-section {
-		position: relative;
-		padding-left: var(--space-5);
 		display: flex;
 		flex-direction: column;
-		gap: var(--space-5);
+		gap: var(--space-4);
 	}
 
-	.group-section::before {
-		content: '';
-		position: absolute;
-		left: 0;
-		top: 4px;
-		bottom: 4px;
-		width: 4px;
-		border-radius: 2px;
-		background-color: var(--group-accent);
-		box-shadow: 0 0 12px color-mix(in srgb, var(--group-accent) 30%, transparent);
-	}
-
-	/* Group header: editorial heading row + monospace rubric chip. */
+	/* Group header: heading row + rubric. */
 	.group-header {
 		display: flex;
 		flex-direction: column;
@@ -475,12 +462,17 @@
 
 	.group-heading-row {
 		display: flex;
-		align-items: baseline;
-		gap: var(--space-3);
+		align-items: center;
+		gap: var(--space-2);
 		flex-wrap: wrap;
 	}
 
+	/* The heading itself carries the accent dot via ::before so it scales
+	   with the text and stays vertically centred without extra wrappers. */
 	.group-heading {
+		display: flex;
+		align-items: center;
+		gap: var(--space-2);
 		font-family: var(--font-display);
 		font-size: var(--font-size-xl);
 		font-weight: 600;
@@ -490,38 +482,56 @@
 		margin: 0;
 	}
 
+	.group-heading::before {
+		content: '';
+		display: inline-block;
+		width: 8px;
+		height: 8px;
+		border-radius: 50%;
+		background-color: var(--group-accent);
+		flex-shrink: 0;
+		/* Soft ambient glow matching the accent hue. */
+		box-shadow: 0 0 6px color-mix(in srgb, var(--group-accent) 50%, transparent);
+	}
+
+	/* Count pill — explicit line-height:1 and vertical centering so the
+	   digit sits exactly in the middle of the badge regardless of the
+	   parent's line-height. */
 	.group-count {
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
-		min-width: 22px;
-		height: 22px;
-		padding: 0 var(--space-2);
+		min-width: 20px;
+		height: 20px;
+		padding: 0 5px;
 		font-family: var(--font-mono);
 		font-size: var(--font-size-2xs);
-		font-weight: 500;
-		letter-spacing: var(--tracking-normal);
+		font-weight: 600;
+		line-height: 1;
+		letter-spacing: 0;
 		color: var(--text-muted);
 		background-color: var(--surface-leaf);
 		border: 1px solid var(--border-hairline);
 		border-radius: var(--radius-leaf);
 	}
 
-	/* Rubric chip styled per DESIGN_SPEC §4 (mono 10px, semibold,
-	   tracking-widest, muted). Quire-sm gives it the chip surface. */
+	/* Rubric — plain mono label, no chip surface (keeps headers light). */
 	.group-rubric {
 		display: inline-block;
 		align-self: flex-start;
-		padding: var(--space-1) var(--space-3);
 		font-family: var(--font-mono);
 		font-size: var(--font-size-2xs);
 		font-weight: 500;
 		letter-spacing: var(--tracking-widest);
 		line-height: var(--leading-tight);
 		text-transform: uppercase;
-		color: var(--text-muted);
+		color: var(--text-disabled);
 		margin: 0;
 		max-width: 60ch;
+		/* Remove the quire-sm chip border/background — rubric is text only. */
+		background: none !important;
+		border: none !important;
+		padding: 0 !important;
 	}
 
 	/* ─── Singles row ───────────────────────────────────────────────── */
@@ -589,10 +599,6 @@
 
 		.groups {
 			gap: var(--space-8);
-		}
-
-		.group-section {
-			padding-left: var(--space-4);
 		}
 
 		.singles-row {
