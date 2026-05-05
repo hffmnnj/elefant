@@ -353,50 +353,57 @@
 </div>
 
 <style>
+	/* ── Container ────────────────────────────────────────────────────── */
+
 	.picker {
 		position: relative;
-		display: inline-block;
+		display: block;
 		width: 100%;
-		max-width: 320px;
 	}
 
-	/* ── Trigger ──────────────────────────────────────────────────────── */
+	/* ── Trigger — looks like a form select ───────────────────────────── */
 
 	.trigger {
-		display: inline-flex;
+		display: flex;
 		align-items: center;
 		gap: var(--space-2);
 		width: 100%;
-		min-height: 32px;
-		padding: var(--space-1-5) var(--space-3);
-		font-family: var(--font-mono);
-		font-size: var(--font-size-sm);
+		height: 36px;
+		padding: 0 var(--space-3);
+		/* Solid surface — matches other inputs on the card */
+		background-color: var(--surface-leaf, #16162a);
+		border: 1px solid var(--border-edge, rgba(255,255,255,0.10));
+		border-radius: var(--radius-leaf, 6px);
 		color: var(--text-prose);
+		font-family: var(--font-body);
+		font-size: var(--font-size-sm);
 		text-align: left;
 		cursor: pointer;
 		transition:
-			border-color var(--transition-fast),
-			background-color var(--transition-fast);
+			border-color var(--transition-fast, 120ms ease),
+			background-color var(--transition-fast, 120ms ease);
 	}
 
 	.trigger:hover:not([disabled]) {
-		border-color: var(--border-emphasis);
+		border-color: var(--border-emphasis, rgba(255,255,255,0.22));
+		background-color: color-mix(in srgb, var(--surface-leaf, #16162a) 85%, white 15%);
 	}
 
 	.trigger:focus-visible {
-		outline: 1px solid var(--border-focus);
-		outline-offset: 2px;
+		outline: none;
+		border-color: var(--color-primary, #4049e1);
+		box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-primary, #4049e1) 25%, transparent);
+	}
+
+	.trigger.open {
+		border-color: var(--color-primary, #4049e1);
+		border-bottom-left-radius: 0;
+		border-bottom-right-radius: 0;
 	}
 
 	.trigger[disabled] {
-		opacity: 0.5;
+		opacity: 0.45;
 		cursor: not-allowed;
-	}
-
-	.trigger.muted .trigger-label {
-		color: var(--text-muted);
-		font-family: var(--font-body);
-		font-style: italic;
 	}
 
 	.trigger-label {
@@ -407,200 +414,220 @@
 		white-space: nowrap;
 	}
 
+	/* "Inherit from default" is shown in muted italic */
+	.trigger.muted .trigger-label {
+		color: var(--text-muted);
+		font-style: italic;
+	}
+
 	.trigger :global(.trigger-chevron) {
 		flex: 0 0 auto;
 		color: var(--text-muted);
-		transition: transform var(--transition-fast);
+		transition: transform var(--transition-fast, 120ms ease);
 	}
 
 	.trigger.open :global(.trigger-chevron) {
 		transform: rotate(180deg);
+		color: var(--color-primary, #4049e1);
 	}
 
-	/* ── Panel ────────────────────────────────────────────────────────── */
+	/* ── Panel — solid, elevated dropdown ─────────────────────────────── */
 
 	.panel {
 		position: absolute;
-		top: calc(100% + var(--space-1));
+		top: 100%; /* flush — trigger already has open border-radius removed */
 		left: 0;
 		right: 0;
-		min-width: 280px;
-		max-height: 360px;
+		min-width: 100%;
+		max-height: 340px;
 		display: flex;
 		flex-direction: column;
-		padding: var(--space-2);
-		z-index: 50;
+		/* Fully opaque dark surface — no transparency */
+		background-color: var(--surface-leaf, #16162a);
+		border: 1px solid var(--color-primary, #4049e1);
+		border-top: 1px solid var(--border-hairline, rgba(255,255,255,0.06));
+		border-bottom-left-radius: var(--radius-leaf, 6px);
+		border-bottom-right-radius: var(--radius-leaf, 6px);
+		box-shadow:
+			0 8px 32px rgba(0, 0, 0, 0.55),
+			0 2px 8px rgba(0, 0, 0, 0.35);
+		z-index: 100;
 		overflow: hidden;
 	}
 
-	/* ── Search ───────────────────────────────────────────────────────── */
+	/* ── Search bar ───────────────────────────────────────────────────── */
 
 	.search {
-		position: relative;
 		display: flex;
 		align-items: center;
-		padding: 0 var(--space-1);
-		margin-bottom: var(--space-2);
-		border-bottom: 1px solid var(--border-hairline);
+		gap: var(--space-2);
+		padding: var(--space-2) var(--space-3);
+		border-bottom: 1px solid var(--border-hairline, rgba(255,255,255,0.06));
+		flex-shrink: 0;
 	}
 
 	.search :global(.search-icon) {
 		flex: 0 0 auto;
-		color: var(--text-muted);
-		margin-right: var(--space-2);
+		color: var(--text-disabled);
 	}
 
 	.search-input {
 		flex: 1 1 auto;
 		min-width: 0;
-		padding: var(--space-1-5) 0;
 		background: transparent;
 		border: none;
 		outline: none;
 		color: var(--text-prose);
 		font-family: var(--font-body);
 		font-size: var(--font-size-sm);
+		line-height: 1.4;
 	}
 
 	.search-input::placeholder {
-		color: var(--text-muted);
+		color: var(--text-disabled);
 	}
 
-	/* ── List ─────────────────────────────────────────────────────────── */
+	/* ── Scrollable list ──────────────────────────────────────────────── */
 
 	.list {
 		flex: 1 1 auto;
 		min-height: 0;
 		overflow-y: auto;
-		padding-right: var(--space-1);
+		padding: var(--space-1) 0;
+		/* Custom scrollbar */
+		scrollbar-width: thin;
+		scrollbar-color: var(--border-edge) transparent;
 	}
 
 	.empty {
-		padding: var(--space-3) var(--space-2);
+		padding: var(--space-4) var(--space-3);
+		font-family: var(--font-body);
 		font-size: var(--font-size-sm);
-		color: var(--text-muted);
+		color: var(--text-disabled);
 		text-align: center;
 	}
 
-	.empty.subdued {
-		font-style: italic;
-	}
+	.empty.subdued { font-style: italic; }
 
-	/* ── Group header (Quire SM chip style) ──────────────────────────── */
+	/* ── Provider group ───────────────────────────────────────────────── */
 
 	.group {
+		margin-top: var(--space-1);
+	}
+
+	.group + .group {
 		margin-top: var(--space-2);
 	}
 
-	.group:first-of-type {
-		margin-top: var(--space-3);
-	}
-
+	/* Plain muted label — no chip border, keeps the list light */
 	.group-header {
-		display: inline-block;
-		padding: 2px var(--space-2);
-		margin: 0 var(--space-1) var(--space-1);
+		display: block;
+		padding: var(--space-1) var(--space-3);
 		font-family: var(--font-mono);
-		font-size: var(--font-size-2xs, 10px);
+		font-size: 10px;
 		font-weight: 600;
-		letter-spacing: var(--tracking-widest);
+		letter-spacing: var(--tracking-widest, 0.08em);
 		text-transform: uppercase;
-		color: var(--text-muted);
+		color: var(--text-disabled);
+		/* Override any quire-sm chip styling */
+		background: none !important;
+		border: none !important;
+		box-shadow: none !important;
 	}
 
 	.group-rows {
 		display: flex;
 		flex-direction: column;
-		gap: 1px;
 	}
 
-	/* ── Row ──────────────────────────────────────────────────────────── */
+	/* ── Option rows ──────────────────────────────────────────────────── */
 
 	.row {
-		display: grid;
-		grid-template-columns: 1fr auto auto;
+		display: flex;
 		align-items: center;
 		gap: var(--space-2);
 		width: 100%;
-		min-height: 32px;
-		padding: var(--space-1-5) var(--space-2);
+		min-height: 34px;
+		padding: 0 var(--space-3);
 		background: transparent;
 		border: none;
-		border-radius: var(--radius-leaf);
 		color: var(--text-prose);
+		font-family: var(--font-mono);
+		font-size: var(--font-size-sm);
 		text-align: left;
 		cursor: pointer;
-		transition: background-color var(--transition-fast);
+		transition: background-color var(--transition-fast, 120ms ease);
 	}
 
+	/* Solid hover — not transparent */
 	.row:hover,
 	.row.focused {
-		background-color: var(--color-surface-hover);
+		background-color: rgba(255, 255, 255, 0.06);
 	}
 
 	.row.selected {
 		background-color: color-mix(
-			in oklch,
-			var(--color-primary, #4049e1) 12%,
-			var(--surface-plate)
+			in srgb,
+			var(--color-primary, #4049e1) 14%,
+			transparent
 		);
 	}
 
 	.row:focus-visible {
-		outline: 1px solid var(--border-focus);
-		outline-offset: -1px;
+		outline: none;
+		background-color: rgba(255, 255, 255, 0.08);
+	}
+
+	/* "Inherit from default" separator row */
+	.row.inherit {
+		font-family: var(--font-body);
+		font-style: italic;
+		color: var(--text-muted);
+		border-bottom: 1px solid var(--border-hairline, rgba(255,255,255,0.06));
+		margin-bottom: var(--space-1);
+		padding-bottom: var(--space-1);
 	}
 
 	.row-label {
-		font-family: var(--font-body);
-		font-size: var(--font-size-sm);
-		color: var(--text-prose);
+		flex: 1 1 auto;
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
 	}
 
 	.row-name {
-		font-family: var(--font-mono);
-		font-size: var(--font-size-sm);
-		color: var(--text-prose);
+		flex: 1 1 auto;
+		min-width: 0;
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
+		color: var(--text-prose);
 	}
 
 	.row-id {
-		font-family: var(--font-mono);
-		font-size: var(--font-size-xs);
-		color: var(--text-muted);
+		flex: 0 1 auto;
+		min-width: 0;
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
-		max-width: 14ch;
+		max-width: 16ch;
+		font-size: var(--font-size-xs);
+		color: var(--text-disabled);
 	}
 
 	.row :global(.row-check) {
-		color: var(--color-primary, #4049e1);
 		flex: 0 0 auto;
-	}
-
-	.row.inherit {
-		grid-template-columns: 1fr auto;
-		font-style: italic;
-		color: var(--text-meta);
-		margin-bottom: var(--space-1);
-		border-bottom: 1px solid var(--border-hairline);
-		border-radius: 0;
-		padding-bottom: var(--space-2);
-	}
-
-	.row.inherit .row-label {
-		color: inherit;
+		color: var(--color-primary, #4049e1);
+		margin-left: auto;
 	}
 
 	/* ── Reduced motion ───────────────────────────────────────────────── */
 
 	@media (prefers-reduced-motion: reduce) {
+		.trigger,
 		.trigger :global(.trigger-chevron),
-		.row,
-		.trigger {
+		.row {
 			transition: none;
 		}
 	}
