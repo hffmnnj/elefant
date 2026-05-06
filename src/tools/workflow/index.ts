@@ -62,6 +62,8 @@ export function createSpecToolContext(input: {
 		.query('SELECT workflow_id FROM spec_workflows WHERE project_id = ? AND is_active = 1 LIMIT 1')
 		.get(input.projectId) as { workflow_id: string } | null;
 	const projectMeta = project ?? { id: input.projectId, name: input.projectId, path: process.cwd() };
+	// TODO: every spec tool context should resolve from DB; the process.cwd()
+	// fallback exists only for static / test paths and should be removed.
 
 	return {
 		database: input.database,

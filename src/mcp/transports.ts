@@ -21,7 +21,7 @@ function remoteRequestInit(config: McpRemoteConfig): RequestInit | undefined {
 	return { headers: config.headers };
 }
 
-export function createStdioTransport(config: McpStdioConfig): StdioClientTransport {
+export function createStdioTransport(config: McpStdioConfig, projectPath?: string): StdioClientTransport {
 	const [command, ...args] = config.command;
 	if (!command) {
 		throw new Error(`MCP stdio server ${config.name} is missing a command`);
@@ -30,7 +30,7 @@ export function createStdioTransport(config: McpStdioConfig): StdioClientTranspo
 	return new StdioClientTransport({
 		command,
 		args,
-		cwd: process.cwd(),
+		cwd: projectPath ?? process.cwd(),
 		env: {
 			...getProcessEnv(),
 			...(config.env ?? {}),

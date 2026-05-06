@@ -26,6 +26,9 @@ let catalogCache: ReferenceCatalog | null = null;
 let cacheKey: string | null = null;
 
 function buildCacheKey(opts: ListReferencesOptions): string {
+	// Reference catalog should resolve from the project directory, not from
+	// the daemon's own startup directory. Callers that need a specific root
+	// must pass it explicitly via opts.cwd.
 	return `${opts.cwd ?? process.cwd()}|${opts.home ?? ''}`;
 }
 

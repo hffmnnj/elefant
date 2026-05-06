@@ -56,6 +56,8 @@ export const applyPatchTool: ToolDefinition<ApplyPatchParams, string> = {
 
 		try {
 			const operations = parsePatchText(params.patchText);
+			// When no project context is available, fall back to the original cwd.
+			// Per-run registries inject a project-aware wrapper instead.
 			const applyResult = await applyPatchOperations(operations, process.cwd());
 			if (!applyResult.ok) {
 				return err(applyResult.error);

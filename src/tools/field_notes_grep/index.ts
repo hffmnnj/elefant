@@ -76,6 +76,7 @@ export interface FieldNotesGrepParams {
 	section?: string;
 	include?: string;
 	maxFiles?: number;
+	projectPath?: string;
 }
 
 export interface FieldNotesGrepFileMatch {
@@ -121,11 +122,16 @@ export const fieldNotesGrepTool: ToolDefinition<FieldNotesGrepParams, string> = 
 			required: false,
 			default: 20,
 		},
+		projectPath: {
+			type: 'string',
+			description: 'Project root directory containing .elefant/field-notes/',
+			required: false,
+		},
 	},
 
 	execute: async (params): Promise<Result<string, ElefantError>> => {
-		const { pattern, section, include, maxFiles = 20 } = params;
-		const projectPath = process.cwd();
+		const { pattern, section, include, maxFiles = 20, projectPath } = params;
+		const resolvedProjectPath = projectPath ?? process.cwd();
 
 		// ── Validate params ──
 
@@ -145,7 +151,7 @@ export const fieldNotesGrepTool: ToolDefinition<FieldNotesGrepParams, string> = 
 
 		// ── Resolve and validate search path ──
 
-		const base = fieldNotesDir(projectPath);
+		const base = fieldNotesDir(resolvedProjectPath);
 		const searchRoot = section ? join(base, section) : base;
 
 		// The base directory itself passes by definition; section
@@ -154,7 +160,7 @@ export const fieldNotesGrepTool: ToolDefinition<FieldNotesGrepParams, string> = 
 		if (searchRoot === base) {
 			searchPath = base;
 		} else {
-			const validated = assertInsideFieldNotes(projectPath, searchRoot);
+			const validated = assertInsideFieldNotes(resolvedProjectPath, searchRoot);
 			if (!validated.ok) return err(validated.error);
 			searchPath = validated.data;
 		}

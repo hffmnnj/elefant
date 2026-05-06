@@ -9,9 +9,9 @@ const WRITE_TOOLS = new Set(['write', 'edit', 'apply_patch']);
 // Source file paths that orchestrators ARE allowed to touch.
 const ALLOWED_PREFIXES = ['.elefant/', '.goopspec/', 'src/tools/workflow/', 'src/agents/'];
 
-function normalizePath(path: string): string {
+function normalizePath(path: string, basePath?: string): string {
 	const withoutLeadingCurrentDir = path.startsWith('./') ? path.slice(2) : path;
-	const cwd = `${process.cwd()}/`;
+	const cwd = `${basePath ?? process.cwd()}/`;
 	return withoutLeadingCurrentDir.startsWith(cwd)
 		? withoutLeadingCurrentDir.slice(cwd.length)
 		: withoutLeadingCurrentDir;
@@ -19,11 +19,12 @@ function normalizePath(path: string): string {
 
 export function evaluateOrchestratorGate(
 	req: OrchestratorGateRequest,
+	projectPath?: string,
 ): 'deny' | 'allow' {
 	if (req.agentType !== 'goop-orchestrator') return 'allow';
 	if (!WRITE_TOOLS.has(req.tool)) return 'allow';
 
-	const path = normalizePath(req.targetPath ?? '');
+	const path = normalizePath(req.targetPath ?? '', projectPath);
 	if (ALLOWED_PREFIXES.some((prefix) => path.startsWith(prefix))) return 'allow';
 
 	return 'deny';

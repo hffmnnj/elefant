@@ -21,7 +21,7 @@ import { createPhaseAllowListFromSpecTools, createSpecPhaseGateHandler } from '.
 import { createDatetimeContextTransformHandler } from '../hooks/datetime-context-transform.ts'
 import { createPkbContextTransformHandler } from '../hooks/pkb-context-transform.ts'
 import { instantiateSpecTools } from '../tools/workflow/index.ts'
-import { sessionManager } from '../tools/shell/index.js'
+import { ShellSessionManager } from '../tools/shell/session.js'
 import { ElefantWsServer } from '../transport/ws-server.ts'
 import { SseManager } from '../transport/sse-manager.ts'
 import { registerSpecModeEventPublisher } from '../transport/spec-mode-events.ts'
@@ -175,7 +175,7 @@ export async function createDaemon(config: ElefantConfig): Promise<Result<Elefan
 
 	hookRegistry.register('shutdown', async () => {
 		await mcpManager.shutdown()
-		await sessionManager.closeAll()
+		await new ShellSessionManager().closeAll()
 		await pluginLoader.unloadAll()
 		ws.stopHeartbeat()
 		sse.destroy()
