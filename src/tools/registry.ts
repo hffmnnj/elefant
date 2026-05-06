@@ -16,13 +16,13 @@ import type { SseManager } from '../transport/sse-manager.js';
 import { applyPatchTool, createApplyPatchTool } from './apply_patch/index.js';
 import { createAgentSessionSearchTool, type AgentSessionSearchDeps } from './agent_session_search/index.js';
 import { editTool, createEditTool } from './edit.js';
-import { globTool } from './glob.js';
-import { grepTool } from './grep.js';
+import { globTool, createGlobTool } from './glob.js';
+import { grepTool, createGrepTool } from './grep.js';
 import { lspTool } from './lsp/index.js';
 import { lspDiagnosticsTool } from './lsp_diagnostics/index.js';
 import { createInteractiveTools } from './interactive/index.js';
 import { readTool, createReadTool } from './read.js';
-import { bashTool } from './shell/index.js';
+import { createBashTool } from './shell/index.js';
 import { skillTool } from './skill/index.js';
 import { referenceTool } from './reference/index.js';
 import { createSpecToolContext, createSpecTools } from './workflow/index.ts';
@@ -442,7 +442,7 @@ export function createToolRegistry(hookRegistry: HookRegistry): ToolRegistry {
 	registry.register(editTool);
 	registry.register(globTool);
 	registry.register(grepTool);
-	registry.register(bashTool);
+	registry.register(createBashTool({ projectPath: process.cwd() }));
 	registry.register(applyPatchTool);
 	registry.register(webfetchTool);
 	registry.register(websearchTool);
@@ -530,9 +530,10 @@ export function createToolRegistryForRun(deps: ToolRegistryRunDeps): ToolRegistr
 	}
 
 	// Register all other static tools (same list as createToolRegistry)
-	registry.register(globTool)
-	registry.register(grepTool)
-	registry.register(bashTool)
+	const projectPath = resolveProjectPath(deps.database, deps.currentRun.projectId);
+	registry.register(createGlobTool({ projectPath }))
+	registry.register(createGrepTool({ projectPath }))
+	registry.register(createBashTool({ projectPath }))
 	registry.register(webfetchTool)
 	registry.register(websearchTool)
 	registry.register(getDatetimeTool)

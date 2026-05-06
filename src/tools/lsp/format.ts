@@ -35,7 +35,10 @@ const SYMBOL_KIND: Record<number, string> = {
 function toDisplayPath(uri: string): string {
   if (uri.startsWith('file://')) {
     const absolutePath = fileURLToPath(uri);
-    const rel = relative(process.cwd(), absolutePath);
+    // Use project path when available (set by per-run registries), otherwise
+    // fall back to process.cwd() for the shared static LSP tool instance.
+    const projectPath = process.env.ELEFANT_PROJECT_PATH ?? process.cwd();
+    const rel = relative(projectPath, absolutePath);
     return rel.length > 0 ? rel : absolutePath;
   }
   return uri;

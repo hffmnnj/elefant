@@ -214,6 +214,8 @@ export async function executeFieldNotesWrite(
     if (!body.ok) return err(body.error);
 
     const projectPath = deps.projectPath ?? process.cwd();
+    // TODO: projectPath should always come from deps; remove fallback once
+    // all callers pass it explicitly (see elefant-daemon-core refactor).
     const ensure = ensureFieldNotes(projectPath);
     if (!ensure.ok) return err(ensure.error);
 

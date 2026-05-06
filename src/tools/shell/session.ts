@@ -67,6 +67,7 @@ export class ShellSession {
 	private readonly process: ReturnType<typeof Bun.spawn>;
 	private readonly stdin: WritableShellStdin;
 	private readonly conversationId: string;
+	private readonly _projectPath: string;
 	private lastActivity: number;
 	private stdoutBuffer = '';
 	private stderrBuffer = '';
@@ -74,18 +75,20 @@ export class ShellSession {
 	private executionChain: Promise<void> = Promise.resolve();
 	private hasExited = false;
 
-	public constructor(conversationId: string) {
+	public constructor(conversationId: string, projectPath: string) {
 		const shellPath = resolveShellPath();
 		if (shellPath === null) {
 			throw new Error('No supported shell found at /bin/bash or /bin/sh');
 		}
 
 		this.conversationId = conversationId;
+		this._projectPath = projectPath;
 		this.lastActivity = Date.now();
 		this.process = Bun.spawn([shellPath], {
 			stdin: 'pipe',
 			stdout: 'pipe',
 			stderr: 'pipe',
+			cwd: projectPath,
 		});
 
 		const stdin = this.process.stdin;
@@ -316,6 +319,11 @@ export class ShellSessionManager {
 	private readonly sessions = new Map<string, ShellSession>();
 	private readonly maxSessions = 5;
 	private readonly idleTimeoutMs = 30 * 60 * 1000;
+	private defaultCwd: string = process.cwd();
+
+	public setDefaultCwd(cwd: string): void {
+		this.defaultCwd = cwd;
+	}
 
 	public getOrCreate(conversationId: string): ShellSession {
 		this.pruneIdleSessions();
@@ -333,7 +341,7 @@ export class ShellSessionManager {
 			this.evictLeastRecentlyActive();
 		}
 
-		const session = new ShellSession(conversationId);
+		const session = new ShellSession(conversationId, this.defaultCwd);
 		this.sessions.set(conversationId, session);
 		return session;
 	}

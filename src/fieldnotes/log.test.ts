@@ -91,6 +91,7 @@ describe('log', () => {
       expect(debugSpy).toHaveLength(1);
       expect(debugSpy[0]).toMatch(/\[test:ns:debug\] debug message 2/);
     });
+  });
 
   describe('predefined loggers', () => {
     test('fieldNotesLog uses fieldnotes namespace', () => {

@@ -119,7 +119,7 @@ function classifyFileReadError(filePath: string, error: unknown): ElefantError {
 
 export async function applyPatchOperations(
 	operations: PatchOperation[],
-	rootDir: string = process.cwd(),
+	rootDir: string,
 ): Promise<Result<ApplyPatchSummary, ElefantError>> {
 	const absoluteRoot = resolve(rootDir);
 	const stagedWrites = new Map<string, string>();

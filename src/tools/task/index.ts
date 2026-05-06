@@ -54,9 +54,12 @@ export const DEFAULT_MAX_CHILDREN = 4
 export const DEFAULT_MAX_TASK_DEPTH = 4
 
 function promptPathIsAllowed(path: string): boolean {
-	const promptsRoot = resolve(process.cwd(), 'src', 'agents', 'prompts')
-	const candidate = isAbsolute(path) ? resolve(path) : resolve(process.cwd(), path)
-	return candidate === promptsRoot || candidate.startsWith(`${promptsRoot}${sep}`)
+	// Use ELEFANT_INSTALL_DIR when available so prompt paths are resolved
+	// relative to the daemon installation directory, not the project cwd.
+	const installDir = process.env.ELEFANT_INSTALL_DIR ?? process.cwd();
+	const promptsRoot = resolve(installDir, 'src', 'agents', 'prompts');
+	const candidate = isAbsolute(path) ? resolve(path) : resolve(installDir, path);
+	return candidate === promptsRoot || candidate.startsWith(`${promptsRoot}${sep}`);
 }
 
 export async function resolveAgentPrompt(
@@ -83,9 +86,10 @@ export async function resolveAgentPrompt(
 	}
 
 	try {
+		const installDir = process.env.ELEFANT_INSTALL_DIR ?? process.cwd();
 		const path = isAbsolute(profile.promptFile)
 			? profile.promptFile
-			: resolve(process.cwd(), profile.promptFile)
+			: resolve(installDir, profile.promptFile)
 		const basePrompt = await readFile(path, 'utf-8')
 		return appendReferenceSection(basePrompt, subagentType)
 	} catch {
