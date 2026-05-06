@@ -65,8 +65,17 @@ export const todowriteTool: ToolDefinition<TodoWriteParams, string> = {
   execute: async (params): Promise<Result<string, ElefantError>> => {
     const { todos, conversationId } = params;
 
-    // Validate each todo
-    for (const todo of todos) {
+    // Filter out items with empty or whitespace-only content rather than
+    // erroring — models sometimes emit placeholder items with no content
+    // set yet (e.g. when calling todowrite with 0-length task arrays or
+    // items whose content field was not yet populated). Silently dropping
+    // them produces a clean list instead of a hard validation failure.
+    const validTodos = todos.filter(
+      (todo) => typeof todo.content === 'string' && todo.content.trim() !== '',
+    );
+
+    // Validate remaining items for status/priority correctness
+    for (const todo of validTodos) {
       const error = validateTodo(todo);
       if (error) {
         return err({
@@ -78,10 +87,13 @@ export const todowriteTool: ToolDefinition<TodoWriteParams, string> = {
 
     // Store the todos
     const key = conversationId ?? 'default';
-    setTodos(key, todos);
+    setTodos(key, validTodos);
 
-    // Return formatted list
-    return ok(formatTodos(todos));
+    // Return formatted list (or explicit empty acknowledgement)
+    if (validTodos.length === 0) {
+      return ok('(no todos)');
+    }
+    return ok(formatTodos(validTodos));
   },
 };
 

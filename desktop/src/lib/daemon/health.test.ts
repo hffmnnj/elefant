@@ -131,7 +131,9 @@ describe('checkServerHealth', () => {
 
 		expect(result.ok).toBe(false);
 		if (!result.ok) {
-			expect(result.error).toBe('Aborted');
+			// Internal timeout fires — reported as 'Connection timed out', not 'Aborted'
+			// (Aborted is reserved for explicit caller-signal cancellation).
+			expect(result.error).toBe('Connection timed out');
 		}
 	});
 
