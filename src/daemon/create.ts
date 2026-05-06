@@ -72,6 +72,26 @@ export async function createDaemon(config: ElefantConfig): Promise<Result<Elefan
 	// B. Initialize SQLite database
 	const db = new Database(projectInfo.dbPath)
 
+	// B1. Sweep orphaned records from any previous daemon run.
+	//     On a clean startup, any session that is still 'pending' (created but
+	//     never started) or 'running' (started but never completed) was
+	//     interrupted by a daemon crash or ungraceful shutdown. Mark them
+	//     'cancelled' so the UI surfaces a clear "session did not finish"
+	//     state instead of a perpetually-pending or perpetually-running entry
+	//     in the history list. Similarly, mark orphaned agent_runs 'cancelled'.
+	try {
+		db.db.run(
+			`UPDATE sessions SET status = 'cancelled', updated_at = datetime('now')
+			 WHERE status IN ('pending', 'running')`,
+		)
+		db.db.run(
+			`UPDATE agent_runs SET status = 'cancelled', ended_at = datetime('now')
+			 WHERE status = 'running'`,
+		)
+	} catch {
+		// Non-fatal — startup can continue without the sweep
+	}
+
 	// C. Initialize StateManager
 	const stateManager = new StateManager(projectInfo.projectPath, {
 		id: projectInfo.projectId,

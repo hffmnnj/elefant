@@ -78,7 +78,7 @@ describe('todo tools', () => {
       expect(error.message).toContain('Invalid priority: urgent');
     });
 
-    it('empty content returns VALIDATION_ERROR', async () => {
+    it('empty content items are silently filtered, keeping valid items', async () => {
       const params: TodoWriteParams = {
         todos: [
           { content: 'Valid task', status: 'pending', priority: 'high' },
@@ -87,13 +87,15 @@ describe('todo tools', () => {
       };
 
       const result = await todowriteTool.execute(params);
-      const error = assertError(result);
-
-      expect(error.code).toBe('VALIDATION_ERROR');
-      expect(error.message).toBe('Todo content must be a non-empty string');
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        // The empty-content item is silently dropped; only the valid item remains
+        expect(result.data).toContain('Valid task');
+        expect(result.data).not.toContain('medium');
+      }
     });
 
-    it('whitespace-only content returns VALIDATION_ERROR', async () => {
+    it('whitespace-only content items are silently filtered', async () => {
       const params: TodoWriteParams = {
         todos: [
           { content: '   ', status: 'pending', priority: 'high' },
@@ -101,10 +103,11 @@ describe('todo tools', () => {
       };
 
       const result = await todowriteTool.execute(params);
-      const error = assertError(result);
-
-      expect(error.code).toBe('VALIDATION_ERROR');
-      expect(error.message).toBe('Todo content must be a non-empty string');
+      // All items filtered → returns '(no todos)' rather than erroring
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.data).toBe('(no todos)');
+      }
     });
 
     it('uses default conversationId when not provided', async () => {

@@ -182,6 +182,7 @@ async function performCheck(
 
 		let errorMessage: string | null = null;
 		let isAborted = false;
+		let isTimeout = false;
 		let latencyMs = 0;
 
 		// ── Attempt fetch ──────────────────────────────────────────────
@@ -209,8 +210,12 @@ async function performCheck(
 			const body = await response.text().catch(() => '');
 			errorMessage = `HTTP ${response.status}${body ? `: ${body}` : ''}`;
 		} catch (err) {
-			if (timeoutController.signal.aborted || callerSignal?.aborted) {
+			if (callerSignal?.aborted) {
+				// Caller explicitly cancelled — treat as a clean abort
 				isAborted = true;
+			} else if (timeoutController.signal.aborted) {
+				// Internal per-attempt timeout fired — not a caller abort
+				isTimeout = true;
 			} else {
 				errorMessage = err instanceof Error ? err.message : 'Unknown error';
 			}
@@ -221,10 +226,22 @@ async function performCheck(
 			}
 		}
 
-		// ── Handle abort ───────────────────────────────────────────────
+		// ── Handle caller abort ────────────────────────────────────────
 		if (isAborted) {
 			// Do not cache abort results — they're transient
 			return { ok: false, error: 'Aborted' };
+		}
+
+		// ── Handle timeout (last attempt only — earlier timeouts retry) ─
+		if (isTimeout && attempt === maxAttempts - 1) {
+			const result: HealthResult = { ok: false, error: 'Connection timed out' };
+			resultCache.set(url, { result, expiresAt: Date.now() + cacheMs });
+			return result;
+		}
+
+		// On a non-final attempt, treat timeout like any other error so we retry
+		if (isTimeout) {
+			errorMessage = 'Connection timed out';
 		}
 
 		// ── Handle last-attempt failure ────────────────────────────────
